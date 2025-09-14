@@ -3,6 +3,9 @@ const router = express.Router();
 
 const {auth,isNgo} = require("../middlewares/auth");
 const {signupNgo,loginNgo} = require("../controllers/Auth");
+const { verifyNgo } = require("../controllers/Verification");
+
+router.post("/verifyNgo", auth, isNgo, verifyNgo);
 
 router.post("/login", loginNgo);
 
