@@ -24,6 +24,7 @@ export default function Dashboard() {
                 <p className="text-sm text-gray-600">Decentralized Carbon Credits Platform</p>
               </div>
             </div>
+            
             <Button 
               variant="outline" 
               onClick={() => setActivePortal(null)}
