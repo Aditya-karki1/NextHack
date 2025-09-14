@@ -29,6 +29,7 @@ const cookieParser = require("cookie-parser");
 app.use(cookieParser());
 const allowedOrigins = [
   "http://localhost:3000",
+  "http://localhost:5173",
   "https://study-notion-frontend-rosy.vercel.app"
 ];
 

@@ -98,6 +98,7 @@ exports.signupGov = async (req,res) => {
             success:true,
             message:" Gov Account created successfully",
             user,
+            role:'Gov'
         })
 
 
@@ -113,6 +114,7 @@ exports.signupGov = async (req,res) => {
 exports.signupNgo = async (req,res) => {
     try{
         const {name,email,password} = req.body;
+        console.log(name,email,password);
         if(!name || !email || !password){
             return res.status(403).json({
                 success:false,
