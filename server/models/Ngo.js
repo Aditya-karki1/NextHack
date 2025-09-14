@@ -12,7 +12,7 @@ const ngoSchema = new mongoose.Schema({
   // Organization fields (embedded directly inside user)
   organization: {
     name: { type: String },
-    type: { type: String, enum: ['NGO','PANCHAYAT','COMMUNITY'] },
+    type: { type: String, enum: ['NGO','SOCIETY','COMMUNITY'] },
     address: { type: String },
     geoBoundary: { type: Object }, // GeoJSON optional
     contact: {

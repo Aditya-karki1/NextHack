@@ -5,21 +5,36 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MapPin, Wallet, CheckCircle, Clock, Camera, FileText, Coins } from 'lucide-react';
+import { MapPin, Wallet, CheckCircle, Clock, Camera, Coins } from 'lucide-react';
 import { mockTasks, mockCarbonCredits, type Task, type CarbonCredit } from '@/lib/mockData';
 
 export default function NGOPortal() {
   const [availableTasks] = useState<Task[]>(mockTasks.filter(t => t.status === 'pending'));
   const [myTasks, setMyTasks] = useState<Task[]>(mockTasks.filter(t => t.assignedTo === 'Green Earth NGO'));
   const [myCredits] = useState<CarbonCredit[]>(mockCarbonCredits.filter(c => c.ngoName === 'Green Earth NGO'));
-  const [showReportForm, setShowReportForm] = useState<string | null>(null);
-  const [reportData, setReportData] = useState({
-    description: '',
-    images: [] as string[],
-    geoLocation: ''
-  });
+  // report form state removed (not used in this component)
+
+  // Verification dialog & form state
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [ngoName, setNgoName] = useState('');
+  const [ngoType, setNgoType] = useState<string | undefined>(undefined);
+  const [govtDoc, setGovtDoc] = useState<File | null>(null);
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [geoBoundary, setGeoBoundary] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const clearError = (field: string) => setErrors(prev => { const copy = { ...prev }; delete (copy as any)[field]; return copy; });
 
   const handleAcceptTask = (taskId: string) => {
     const task = availableTasks.find(t => t.id === taskId);
@@ -29,23 +44,7 @@ export default function NGOPortal() {
     }
   };
 
-  const handleSubmitReport = (taskId: string) => {
-    setMyTasks(myTasks.map(task => 
-      task.id === taskId 
-        ? { ...task, status: 'completed' as const, completedDate: new Date().toISOString().split('T')[0] }
-        : task
-    ));
-    setShowReportForm(null);
-    setReportData({ description: '', images: [], geoLocation: '' });
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      const newImages = Array.from(files).map(file => URL.createObjectURL(file));
-      setReportData({ ...reportData, images: [...reportData.images, ...newImages] });
-    }
-  };
+  // project report handlers removed from this file
 
   const totalCreditsEarned = myCredits.reduce((sum, credit) => sum + credit.amount, 0);
   const availableCredits = myCredits.filter(c => c.status === 'available').reduce((sum, c) => sum + c.amount, 0);
@@ -113,11 +112,135 @@ export default function NGOPortal() {
         </TabsList>
 
         <TabsContent value="marketplace" className="space-y-6">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col items-center md:flex-row md:justify-between md:items-center">
             <h2 className="text-2xl font-bold">Available Tasks</h2>
-            <Badge variant="secondary" className="bg-green-100 text-green-700">
-              {availableTasks.length} tasks available
-            </Badge>
+            <div className="flex-1 flex justify-center md:justify-end items-center gap-3">
+              <Badge variant="secondary" className="bg-green-100 text-green-700">
+                {availableTasks.length} tasks available
+              </Badge>
+              <Dialog open={verifyOpen} onOpenChange={setVerifyOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded-md">Verify NGO</Button>
+                </DialogTrigger>
+                <DialogContent className="bg-white text-slate-900 rounded-lg shadow-lg p-6">
+                  <DialogHeader>
+                    <DialogTitle>Verify NGO</DialogTitle>
+                    <DialogDescription>Provide official details to verify this NGO.</DialogDescription>
+                  </DialogHeader>
+                  {/* lightweight inline form for quick verification submission */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+
+                      // validate required fields (all except geoBoundary)
+                      const newErrors: Record<string, string> = {};
+                      if (!ngoName.trim()) newErrors.ngoName = 'Name is required';
+                      if (!ngoType) newErrors.ngoType = 'Organization type is required';
+                      if (!address.trim()) newErrors.address = 'Address is required';
+                      if (!govtDoc) newErrors.govtDoc = 'Government document (PDF) is required';
+                      if (!phone.trim()) newErrors.phone = 'Phone is required';
+                      if (!email.trim()) newErrors.email = 'Email is required';
+                      else if (!/^\S+@\S+\.\S+$/.test(email)) newErrors.email = 'Enter a valid email';
+
+                      // validate file type if present
+                      if (govtDoc && govtDoc.type !== 'application/pdf') newErrors.govtDoc = 'Only PDF files are accepted';
+
+                      setErrors(newErrors);
+                      if (Object.keys(newErrors).length > 0) {
+                        return; // don't submit
+                      }
+
+                      // build organization payload matching server schema
+                      let parsedGeo: any = null;
+                      try {
+                        parsedGeo = geoBoundary ? JSON.parse(geoBoundary) : null;
+                      } catch (err) {
+                        // if parsing fails, keep as raw string
+                        parsedGeo = geoBoundary;
+                      }
+
+                      const organization = {
+                        name: ngoName || undefined,
+                        type: ngoType || undefined,
+                        address: address || undefined,
+                        geoBoundary: parsedGeo,
+                        contact: {
+                          phone: phone || undefined,
+                          email: email || undefined,
+                        },
+                        documents: govtDoc ? [{ cid: null, filename: govtDoc.name }] : [],
+                        // orgCreatedAt will be set by the server if needed
+                      };
+
+                      console.log('NGO verification submit - organization:', organization);
+                      // close dialog
+                      setVerifyOpen(false);
+                    }}
+                    className="grid gap-3 py-2"
+                  >
+                    <div>
+                      <Label htmlFor="ngoName">Name of NGO</Label>
+                      <Input id="ngoName" value={ngoName} onChange={(e) => { setNgoName(e.target.value); clearError('ngoName'); }} placeholder="e.g., Green Earth NGO" />
+                      {errors.ngoName && <p className="text-sm text-red-600 mt-1">{errors.ngoName}</p>}
+                    </div>
+                    <div>
+                      <Label htmlFor="ngoType">Organization Type</Label>
+                      <Select value={ngoType} onValueChange={(v) => { setNgoType(v); clearError('ngoType'); }}>
+                        <SelectTrigger id="ngoType" className="w-full">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent
+                          position="popper"
+                          sideOffset={6}
+                          align="start"
+                          className="z-50 min-w-[12rem] bg-white text-slate-900 rounded-md shadow-lg ring-1 ring-slate-200 p-1"
+                        >
+                          <SelectItem value="NGO">NGO</SelectItem>
+                          <SelectItem value="PANCHAYAT">PANCHAYAT</SelectItem>
+                          <SelectItem value="COMMUNITY">COMMUNITY</SelectItem>
+                        </SelectContent>
+                      {errors.ngoType && <p className="text-sm text-red-600 mt-1">{errors.ngoType}</p>}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="address">Address</Label>
+                      <Input id="address" value={address} onChange={(e) => { setAddress(e.target.value); clearError('address'); }} placeholder="Organization address" />
+                      {errors.address && <p className="text-sm text-red-600 mt-1">{errors.address}</p>}
+                    </div>
+                    <div>
+                      <Label htmlFor="geoBoundary">Geo Boundary (optional, GeoJSON)</Label>
+                      <Input id="geoBoundary" value={geoBoundary} onChange={(e) => setGeoBoundary(e.target.value)} placeholder='e.g. {"type":"Polygon",...}' />
+                    </div>
+                    <div>
+                      <Label htmlFor="govtDoc">Govt Document (PDF)</Label>
+                      <Input
+                        id="govtDoc"
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => { setGovtDoc(e.target.files?.[0] ?? null); clearError('govtDoc'); }}
+                      />
+                      {errors.govtDoc && <p className="text-sm text-red-600 mt-1">{errors.govtDoc}</p>}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input id="phone" value={phone} onChange={(e) => { setPhone(e.target.value); clearError('phone'); }} placeholder="+91 98765 43210" />
+                        {errors.phone && <p className="text-sm text-red-600 mt-1">{errors.phone}</p>}
+                      </div>
+                      <div>
+                        <Label htmlFor="email">Email</Label>
+                        <Input id="email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); clearError('email'); }} placeholder="contact@ngo.org" />
+                        {errors.email && <p className="text-sm text-red-600 mt-1">{errors.email}</p>}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button type="button" variant="outline" onClick={() => setVerifyOpen(false)}>Cancel</Button>
+                      <Button type="submit" className="bg-green-600 text-white hover:bg-green-700">Submit for Verification</Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
 
           <div className="grid gap-4">
@@ -150,75 +273,8 @@ export default function NGOPortal() {
                 </CardContent>
               </Card>
             ))}
+
           </div>
-        </TabsContent>
-
-        <TabsContent value="mytasks" className="space-y-6">
-          <h2 className="text-2xl font-bold">My Tasks</h2>
-
-          {showReportForm && (
-            <Card className="border-blue-200">
-              <CardHeader>
-                <CardTitle>Submit Project Report</CardTitle>
-                <CardDescription>Upload evidence of completed plantation work</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="description">Project Description</Label>
-                  <Textarea
-                    id="description"
-                    value={reportData.description}
-                    onChange={(e) => setReportData({...reportData, description: e.target.value})}
-                    placeholder="Describe the completed work, challenges faced, and outcomes..."
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="images">Upload Images (Geo-tagged)</Label>
-                  <Input
-                    id="images"
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="mb-2"
-                  />
-                  {reportData.images.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      {reportData.images.map((img, index) => (
-                        <div key={index} className="relative">
-                          <img src={img} alt={`Upload ${index + 1}`} className="w-full h-20 object-cover rounded" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="geoLocation">GPS Coordinates</Label>
-                  <Input
-                    id="geoLocation"
-                    value={reportData.geoLocation}
-                    onChange={(e) => setReportData({...reportData, geoLocation: e.target.value})}
-                    placeholder="e.g., 28.6139, 77.2090"
-                  />
-                </div>
-
-                <div className="flex space-x-2">
-                  <Button 
-                    onClick={() => handleSubmitReport(showReportForm)}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Submit Report
-                  </Button>
-                  <Button variant="outline" onClick={() => setShowReportForm(null)}>
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           <div className="grid gap-4">
             {myTasks.map((task) => (
@@ -256,7 +312,7 @@ export default function NGOPortal() {
                     <div className="ml-4">
                       {task.status === 'active' && (
                         <Button 
-                          onClick={() => setShowReportForm(task.id)}
+                          onClick={() => alert('Open project report form (mock)')}
                           className="bg-blue-600 hover:bg-blue-700"
                         >
                           <Camera className="w-4 h-4 mr-2" />
@@ -424,3 +480,4 @@ export default function NGOPortal() {
     </div>
   );
 }
+

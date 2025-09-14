@@ -1,88 +1,88 @@
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
-exports.auth = (req,res,next) => {
-    try{
-        const token = req.cookies.token || req.body.token || req.header("Authorization").replace("Bearer ","");
+// Auth middleware - validate JWT token
+exports.auth = (req, res, next) => {
+    try {
+        const authHeader = req.headers["authorization"];
+        const token = req.cookies.token || req.body.token || (authHeader && authHeader.replace("Bearer ", ""));
 
-        if(!token){
+        if (!token) {
             return res.status(401).json({
-                success:false,
-                message:"token is missing"
-            })
+                success: false,
+                message: "Token is missing"
+            });
         }
 
-        try{
-            const decode = jwt.verify(token,process.env.JWT_SECRET);
-            console.log(decode);
-            req.user = decode;
-        }
-        catch(error){
-            console.log(error.message)
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            req.user = decoded; // Attach user info to request
+        } catch (error) {
+            console.log("JWT Error:", error.message);
             return res.status(401).json({
-                success:false, 
-                message:"token is invalid",
-            })
+                success: false,
+                message: "Token is invalid"
+            });
         }
 
         next();
-    }
-    catch(error){
-        console.log(error)
-        return res.status(401).json({
-            success:false,
-            message:"something went wrong while validating"
-        })
+    } catch (error) {
+        console.log("Auth Middleware Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong while validating token"
+        });
     }
 };
 
-exports.isGov = (req,res,next) => {
-    try{
-        if(req.user.role !== "Gov"){
-            return res.status(401).json({
-                success:false,
-                message:"this is a protected route for Gov only"
-            })
+// Role-based Middleware
+exports.isGov = (req, res, next) => {
+    try {
+        if (req.user.role !== "GOV") {
+            return res.status(403).json({
+                success: false,
+                message: "This is a protected route for GOV only"
+            });
         }
         next();
-    }catch(error){
+    } catch (error) {
         return res.status(500).json({
-            success:false,
-            message:"something went wrong while validating"
-        })
+            success: false,
+            message: "Something went wrong while validating GOV role"
+        });
     }
 };
 
-exports.isNgo = (req,res,next) => {
-    try{
-        if(req.user.role !== "Ngo"){
-            return res.status(401).json({
-                success:false,
-                message:"this is a protected route for Ngo only"
-            })
+exports.isNgo = (req, res, next) => {
+    try {
+        if (req.user.role !== "NGO") {
+            return res.status(403).json({
+                success: false,
+                message: "This is a protected route for NGO only"
+            });
         }
         next();
-    }catch(error){
+    } catch (error) {
         return res.status(500).json({
-            success:false,
-            message:"something went wrong while validating"
-        })
+            success: false,
+            message: "Something went wrong while validating NGO role"
+        });
     }
 };
 
-exports.isComp = (req,res,next) => {
-    try{
-        if(req.user.role !== "Comp"){
-            return res.status(401).json({
-                success:false,
-                message:"this is a protected route for Comp only"
-            })
+exports.isComp = (req, res, next) => {
+    try {
+        if (req.user.role !== "Comp") {
+            return res.status(403).json({
+                success: false,
+                message: "This is a protected route for Company only"
+            });
         }
         next();
-    }catch(error){
+    } catch (error) {
         return res.status(500).json({
-            success:false,
-            message:"something went wrong while validating"
-        })
+            success: false,
+            message: "Something went wrong while validating Company role"
+        });
     }
-}
+};
