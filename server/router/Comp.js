@@ -3,6 +3,8 @@ const router = express.Router();
 
 const {auth,isComp} = require("../middlewares/auth");
 const {signupComp,loginComp} = require("../controllers/Auth");
+const { createProject } = require('../controllers/Project');
+
 
 router.post("/login", loginComp);
 

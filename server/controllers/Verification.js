@@ -5,6 +5,7 @@ const fs = require("fs");
 exports.verifyNgo = async (req, res) => {
     try {
         const userId = req.user.id;
+        console.log(userId)
 
         // Find NGO by user ID
         const ngo = await Ngo.findById(userId);

@@ -36,6 +36,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // }, []);
 
   // Login function
+
+
+  useEffect(() => {
+  const fetchUser = async () => {
+    try {
+      const res = await axios.get("http://localhost:4000/api/v1/auth/me", {
+        withCredentials: true, // important to send cookies
+      });
+      setUser(res.data.user); // backend should return { user: { id, name, role } }
+    } catch (err) {
+      setUser(null);
+    }
+  };
+
+  fetchUser();
+}, []);
+
   // ---- AuthProvider.tsx ----
 const login = async (role: UserRole, credentials: { email: string; password: string }): Promise<boolean> => {
   try {
@@ -45,12 +62,13 @@ const login = async (role: UserRole, credentials: { email: string; password: str
         : role === "NGO"
         ? "http://localhost:4000/api/v1/ngo/login"
         : "http://localhost:4000/api/v1/company/login";
-
+ console.log("check");
+ console.log(endpoint );
     const res = await axios.post(endpoint, credentials, { withCredentials: true });
     console.log(res.data);
     setUser(res.data.userObj);
 
-    return true; // ✅ Now TypeScript is happy
+    return true; // Now TypeScript is happy
   } catch (err) {
     console.error(err);
     return false;

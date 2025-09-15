@@ -1,7 +1,7 @@
 const express = require("express");
 const app = express();
 require("dotenv").config();
-
+const auth = require("./middlewares/auth").auth;
 const PORT = process.env.PORT || 4000;
 
 // Middleware
@@ -23,11 +23,12 @@ const compRoutes = require("./router/Comp");
 
 // Middleware setup
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(fileUpload({
-    useTempFiles: true,
-    tempFileDir: '/tmp/',
-}));
+// app.use(fileUpload({
+//     useTempFiles: true,
+//     tempFileDir: '/tmp/',
+// }));
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -50,7 +51,9 @@ app.use(cors({
 app.use("/api/v1/gov", govRoutes);
 app.use("/api/v1/ngo", ngoRoutes);
 app.use("/api/v1/company", compRoutes);
-
+app.get("/api/v1/auth/me", auth, (req, res) => {
+  res.json({ user: req.user });
+});
 // Test Route
 app.get("/", (req, res) => {
     return res.json({

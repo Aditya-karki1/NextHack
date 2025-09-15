@@ -269,6 +269,7 @@ exports.loginNgo = async (req,res) => {
     try{
 
         const {email,password} = req.body;
+        console.log(email);
 
         if(!email || !password){
             return res.status(403).json({

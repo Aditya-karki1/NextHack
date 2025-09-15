@@ -16,6 +16,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { MapPin, Wallet, CheckCircle, Clock, Camera, Coins } from 'lucide-react';
 import { mockTasks, mockCarbonCredits, type Task, type CarbonCredit } from '@/lib/mockData';
+import axios from 'axios';
 
 export default function NGOPortal() {
   const [availableTasks] = useState<Task[]>(mockTasks.filter(t => t.status === 'pending'));
@@ -43,6 +44,72 @@ export default function NGOPortal() {
       setMyTasks([...myTasks, updatedTask]);
     }
   };
+const handleVerifyNgo = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  // validate required fields (all except geoBoundary)
+  const newErrors: Record<string, string> = {};
+  if (!ngoName.trim()) newErrors.ngoName = "Name is required";
+  if (!ngoType) newErrors.ngoType = "Organization type is required";
+  if (!address.trim()) newErrors.address = "Address is required";
+  if (!govtDoc) newErrors.govtDoc = "Government document (PDF) is required";
+  if (!phone.trim()) newErrors.phone = "Phone is required";
+  if (!email.trim()) newErrors.email = "Email is required";
+  else if (!/^\S+@\S+\.\S+$/.test(email)) newErrors.email = "Enter a valid email";
+
+  // validate file type if present
+  if (govtDoc && govtDoc.type !== "application/pdf") newErrors.govtDoc = "Only PDF files are accepted";
+
+  setErrors(newErrors);
+  if (Object.keys(newErrors).length > 0) return;
+
+  // build organization payload matching server schema
+  let parsedGeo: any = null;
+  try {
+    parsedGeo = geoBoundary ? JSON.parse(geoBoundary) : null;
+  } catch (err) {
+    parsedGeo = geoBoundary; // raw string if invalid JSON
+  }
+
+  const organization = {
+    name: ngoName || undefined,
+    type: ngoType || undefined,
+    address: address || undefined,
+    geoBoundary: parsedGeo,
+    contact: {
+      phone: phone || undefined,
+      email: email || undefined,
+    },
+    documents: govtDoc ? [{ cid: null, filename: govtDoc.name }] : [],
+  };
+
+  try {
+    // create form data for file upload
+    const formData = new FormData();
+    formData.append("organization", JSON.stringify(organization));
+    if (govtDoc) formData.append("govtDoc", govtDoc);
+
+    // Send with cookies
+    const response = await axios.post(
+      "http://localhost:4000/api/v1/ngo/verifyNgo",
+      formData,
+      {
+        withCredentials: true, // <- IMPORTANT: sends cookies automatically
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    if (response.status === 200) {
+      alert("NGO verification submitted successfully!");
+      setVerifyOpen(false);
+    }
+  } catch (err: any) {
+    console.error(err);
+    alert(err.response?.data?.message || "Verification failed");
+  }
+};
 
   // project report handlers removed from this file
 
@@ -130,51 +197,7 @@ export default function NGOPortal() {
                   {/* lightweight inline form for quick verification submission */}
                   <form
                     onSubmit={(e) => {
-                      e.preventDefault();
-
-                      // validate required fields (all except geoBoundary)
-                      const newErrors: Record<string, string> = {};
-                      if (!ngoName.trim()) newErrors.ngoName = 'Name is required';
-                      if (!ngoType) newErrors.ngoType = 'Organization type is required';
-                      if (!address.trim()) newErrors.address = 'Address is required';
-                      if (!govtDoc) newErrors.govtDoc = 'Government document (PDF) is required';
-                      if (!phone.trim()) newErrors.phone = 'Phone is required';
-                      if (!email.trim()) newErrors.email = 'Email is required';
-                      else if (!/^\S+@\S+\.\S+$/.test(email)) newErrors.email = 'Enter a valid email';
-
-                      // validate file type if present
-                      if (govtDoc && govtDoc.type !== 'application/pdf') newErrors.govtDoc = 'Only PDF files are accepted';
-
-                      setErrors(newErrors);
-                      if (Object.keys(newErrors).length > 0) {
-                        return; // don't submit
-                      }
-
-                      // build organization payload matching server schema
-                      let parsedGeo: any = null;
-                      try {
-                        parsedGeo = geoBoundary ? JSON.parse(geoBoundary) : null;
-                      } catch (err) {
-                        // if parsing fails, keep as raw string
-                        parsedGeo = geoBoundary;
-                      }
-
-                      const organization = {
-                        name: ngoName || undefined,
-                        type: ngoType || undefined,
-                        address: address || undefined,
-                        geoBoundary: parsedGeo,
-                        contact: {
-                          phone: phone || undefined,
-                          email: email || undefined,
-                        },
-                        documents: govtDoc ? [{ cid: null, filename: govtDoc.name }] : [],
-                        // orgCreatedAt will be set by the server if needed
-                      };
-
-                      console.log('NGO verification submit - organization:', organization);
-                      // close dialog
-                      setVerifyOpen(false);
+                     handleVerifyNgo(e);
                     }}
                     className="grid gap-3 py-2"
                   >

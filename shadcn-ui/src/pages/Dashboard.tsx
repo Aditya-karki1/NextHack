@@ -12,6 +12,7 @@ console.log ("check",user)
   // Function to handle portal click
   const handlePortalAccess = (role: "GOV" | "NGO" | "COMPANY") => {
     if (user && user.role === role) {
+      console.log("User role matches:", user.role);
       // If logged in with the correct role → Go to portal directly
       if (role === "GOV") navigate("/government");
       if (role === "NGO") navigate("/ngo");

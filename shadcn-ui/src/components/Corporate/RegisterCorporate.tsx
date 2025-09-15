@@ -22,7 +22,7 @@ export default function RegisterCorporate() {
 
     try {
       // Replace with actual registration API call if exists
-      await axios.post("/api/v1/company/signup", { name, email, password });
+      await axios.post("http://localhost:4000/api/v1/company/signup", { name, email, password });
 
       // Auto login after successful registration
       await login("COMPANY", { email, password });

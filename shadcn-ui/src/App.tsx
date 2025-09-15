@@ -14,9 +14,10 @@ import LoginNGO from "./components/Ngo/LoginNGO";
 import RegisterNGO from "./components/Ngo/RegisterNGO";
 import LoginCorporate from "./components/Corporate/LoginCorporate";
 import RegisterCorporate from "./components/Corporate/RegisterCorporate";
-
+import ProjectDetail from "./pages/ProjectDetail";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./context/ProtectedRoute";
+import NgoDetail from "./pages/NgoDetail";
 
 const queryClient = new QueryClient();
 
@@ -35,7 +36,8 @@ const App = () => (
             <Route path="/register-ngo" element={<RegisterNGO />} />
             <Route path="/login-corporate" element={<LoginCorporate />} />
             <Route path="/register-corporate" element={<RegisterCorporate />} />
-
+            <Route path="/government/projects/:projectId" element={<ProjectDetail />} />
+                <Route path="/ngos/:ngoId" element={<NgoDetail/>} />
             {/* Protected Routes with Role Access */}
             <Route
               path="/government"
@@ -56,7 +58,7 @@ const App = () => (
             <Route
               path="/corporate"
               element={
-                <ProtectedRoute allowedRoles={["COMPANY"]}>
+                <ProtectedRoute allowedRoles={["Comp"]}>
                   <CorporatePortal />
                 </ProtectedRoute>
               }
