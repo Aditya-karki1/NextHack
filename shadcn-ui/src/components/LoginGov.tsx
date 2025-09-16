@@ -1,10 +1,12 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from '@/hooks/use-toast';
 import { useNavigate, useLocation } from "react-router-dom";
 
 export default function LoginGov() {
   const { login } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/government";
@@ -24,11 +26,11 @@ export default function LoginGov() {
     if (success) {
       navigate("/government");  // ✅ Only navigate after success
     } else {
-      alert("Login failed. Check your credentials.");
+      toast({ title: 'Login failed', description: 'Check your credentials.' });
     }
   } catch (err) {
     console.error(err);
-    alert("Login failed. Check your credentials.");
+    toast({ title: 'Login failed', description: 'Check your credentials.' });
   } finally {
     setLoading(false);
   }

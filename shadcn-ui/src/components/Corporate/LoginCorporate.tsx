@@ -1,10 +1,12 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from '@/hooks/use-toast';
 import { useNavigate, useLocation, Link } from "react-router-dom";
 
 export default function LoginCorporate() {
   const { login } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/corporate";
@@ -16,7 +18,7 @@ export default function LoginCorporate() {
     e.preventDefault();
 
     if (!email || !password) {
-      alert("Please enter email and password");
+      toast({ title: 'Missing fields', description: 'Please enter email and password' });
       return;
     }
 
@@ -25,7 +27,7 @@ export default function LoginCorporate() {
       navigate(from, { replace: true });
     } catch (err) {
       console.error(err);
-      alert("Login failed");
+      toast({ title: 'Login failed', description: 'Login failed' });
     }
   };
 

@@ -3,9 +3,11 @@ import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from '@/hooks/use-toast';
 
 export default function RegisterNGO() {
   const { login } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
@@ -16,7 +18,7 @@ export default function RegisterNGO() {
     e.preventDefault();
 
     if (!name || !email || !password) {
-      alert("Please fill all fields");
+      toast({ title: 'Missing fields', description: 'Please fill all fields' });
       return;
     }
 
@@ -29,7 +31,7 @@ export default function RegisterNGO() {
       navigate("/ngo");
     } catch (error) {
       console.error("Registration failed:", error);
-      alert("Registration failed. Please try again.");
+      toast({ title: 'Registration failed', description: 'Registration failed. Please try again.' });
     }
   };
 

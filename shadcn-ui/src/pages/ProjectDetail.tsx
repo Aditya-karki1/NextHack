@@ -1,5 +1,6 @@
 // pages/ProjectDetail.tsx
 import { useEffect, useState, useRef } from "react";
+import { useToast } from '@/hooks/use-toast';
 import { useParams, useNavigate } from "react-router-dom";
 
 /// <reference types="@types/google.maps" />
@@ -20,6 +21,7 @@ interface Project {
 
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
+  const { toast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
 
   // Auto map analysis
@@ -136,7 +138,7 @@ export default function ProjectDetail() {
       reader.readAsDataURL(uploadedFile);
       return;
     }
-    alert("Please select an image to analyze.");
+    toast({ title: 'No image selected', description: 'Please select an image to analyze.' });
   };
 
   const analyzeImgData = (
@@ -178,11 +180,11 @@ export default function ProjectDetail() {
           idleLand: uploadedIdleLand,
         }),
       });
-      alert("Uploaded analysis saved successfully!");
+      toast({ title: 'Saved', description: 'Uploaded analysis saved successfully!' });
       navigate("/government");
     } catch (err) {
       console.error(err);
-      alert("Failed to save analysis.");
+      toast({ title: 'Save failed', description: 'Failed to save analysis.' });
     }
   };
 

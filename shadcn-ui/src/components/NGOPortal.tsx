@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,12 +16,16 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { MapPin, Wallet, CheckCircle, Clock, Camera, Coins } from 'lucide-react';
-import { mockTasks, mockCarbonCredits, type Task, type CarbonCredit } from '@/lib/mockData';
+import { mockTasks, mockCarbonCredits, assignTaskToNgo, approveTask, type Task, type CarbonCredit } from '@/lib/mockData';
 import axios from 'axios';
+import { useEffect } from 'react';
+import MRVReportModal from './MRVReportModal';
 
 export default function NGOPortal() {
-  const [availableTasks] = useState<Task[]>(mockTasks.filter(t => t.status === 'pending'));
-  const [myTasks, setMyTasks] = useState<Task[]>(mockTasks.filter(t => t.assignedTo === 'Green Earth NGO'));
+  const { toast } = useToast();
+  const [availableTasks, setAvailableTasks] = useState<Task[]>(mockTasks.filter(t => t.status === 'pending'));
+  const [myTasks, setMyTasks] = useState<Task[]>([]);
+  const [ngoDisplayName, setNgoDisplayName] = useState<string>('Green Earth NGO');
   const [myCredits] = useState<CarbonCredit[]>(mockCarbonCredits.filter(c => c.ngoName === 'Green Earth NGO'));
   // report form state removed (not used in this component)
 
@@ -37,81 +42,166 @@ export default function NGOPortal() {
 
   const clearError = (field: string) => setErrors(prev => { const copy = { ...prev }; delete (copy as any)[field]; return copy; });
 
-  const handleAcceptTask = (taskId: string) => {
-    const task = availableTasks.find(t => t.id === taskId);
-    if (task) {
-      const updatedTask = { ...task, status: 'active' as const, assignedTo: 'Green Earth NGO' };
-      setMyTasks([...myTasks, updatedTask]);
-    }
-  };
-const handleVerifyNgo = async (e: React.FormEvent) => {
-  e.preventDefault();
+  const [mrvOpen, setMrvOpen] = useState(false);
+  const [mrvProjectId, setMrvProjectId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [mrvByProject, setMrvByProject] = useState<Record<string, any>>({});
 
-  // validate required fields (all except geoBoundary)
-  const newErrors: Record<string, string> = {};
-  if (!ngoName.trim()) newErrors.ngoName = "Name is required";
-  if (!ngoType) newErrors.ngoType = "Organization type is required";
-  if (!address.trim()) newErrors.address = "Address is required";
-  if (!govtDoc) newErrors.govtDoc = "Government document (PDF) is required";
-  if (!phone.trim()) newErrors.phone = "Phone is required";
-  if (!email.trim()) newErrors.email = "Email is required";
-  else if (!/^\S+@\S+\.\S+$/.test(email)) newErrors.email = "Enter a valid email";
-
-  // validate file type if present
-  if (govtDoc && govtDoc.type !== "application/pdf") newErrors.govtDoc = "Only PDF files are accepted";
-
-  setErrors(newErrors);
-  if (Object.keys(newErrors).length > 0) return;
-
-  // build organization payload matching server schema
-  let parsedGeo: any = null;
-  try {
-    parsedGeo = geoBoundary ? JSON.parse(geoBoundary) : null;
-  } catch (err) {
-    parsedGeo = geoBoundary; // raw string if invalid JSON
-  }
-
-  const organization = {
-    name: ngoName || undefined,
-    type: ngoType || undefined,
-    address: address || undefined,
-    geoBoundary: parsedGeo,
-    contact: {
-      phone: phone || undefined,
-      email: email || undefined,
-    },
-    documents: govtDoc ? [{ cid: null, filename: govtDoc.name }] : [],
+  const openMrvFor = (projectId: string) => {
+    setMrvProjectId(projectId);
+    setMrvOpen(true);
   };
 
-  try {
-    // create form data for file upload
-    const formData = new FormData();
-    formData.append("organization", JSON.stringify(organization));
-    if (govtDoc) formData.append("govtDoc", govtDoc);
-
-    // Send with cookies
-    const response = await axios.post(
-      "http://localhost:4000/api/v1/ngo/verifyNgo",
-      formData,
-      {
-        withCredentials: true, // <- IMPORTANT: sends cookies automatically
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+  useEffect(() => {
+    (async () => {
+      // fetch current authenticated user
+      try {
+        const res = await axios.get('http://localhost:4000/api/v1/auth/me', { withCredentials: true });
+        if (res.status === 200 && res.data?.user) {
+          setCurrentUserId(res.data.user._id || res.data.user.id || null);
+          // derive a display name for the NGO from available fields
+          const name = res.data.user.name || res.data.user.orgName || res.data.user.registrationId || res.data.user.ngoName;
+          if (name) setNgoDisplayName(name);
+        }
+      } catch (err: any) {
+        console.debug('No authenticated user found', err?.response?.status ?? err?.message ?? err);
       }
-    );
 
-    if (response.status === 200) {
-      alert("NGO verification submitted successfully!");
-      setVerifyOpen(false);
+      // fetch MRV for mock tasks (both available and my tasks)
+      try {
+        const map: Record<string, any> = {};
+        const ids = Array.from(new Set([...
+          availableTasks.map(t => t.id),
+          myTasks.map(t => t.id)
+        ].flat()));
+
+        await Promise.all(ids.map(async (id) => {
+          try {
+            const res = await axios.get(`http://localhost:4000/api/v1/mrv/project/${id}`);
+            if (res.status === 200 && res.data?.records?.length) {
+              map[id] = res.data.records[0];
+            }
+          } catch (e) {
+            // ignore
+          }
+        }));
+        setMrvByProject(map);
+      } catch (err) {
+        // ignore
+      }
+    })();
+  }, []);
+
+  const handleVerifyNgo = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // validate required fields (all except geoBoundary)
+    const newErrors: Record<string, string> = {};
+    if (!ngoName.trim()) newErrors.ngoName = "Name is required";
+    if (!ngoType) newErrors.ngoType = "Organization type is required";
+    if (!address.trim()) newErrors.address = "Address is required";
+    if (!govtDoc) newErrors.govtDoc = "Government document (PDF) is required";
+    if (!phone.trim()) newErrors.phone = "Phone is required";
+    if (!email.trim()) newErrors.email = "Email is required";
+    else if (!/^\S+@\S+\.\S+$/.test(email)) newErrors.email = "Enter a valid email";
+
+    // validate file type if present
+    if (govtDoc && govtDoc.type !== "application/pdf") newErrors.govtDoc = "Only PDF files are accepted";
+
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) return;
+
+    // build organization payload matching server schema
+    let parsedGeo: any = null;
+    try {
+      parsedGeo = geoBoundary ? JSON.parse(geoBoundary) : null;
+    } catch (err) {
+      parsedGeo = geoBoundary; // raw string if invalid JSON
     }
-  } catch (err: any) {
-    console.error(err);
-    alert(err.response?.data?.message || "Verification failed");
-  }
-};
+
+    const organization = {
+      name: ngoName || undefined,
+      type: ngoType || undefined,
+      address: address || undefined,
+      geoBoundary: parsedGeo,
+      contact: {
+        phone: phone || undefined,
+        email: email || undefined,
+      },
+      documents: govtDoc ? [{ cid: null, filename: govtDoc.name }] : [],
+    };
+
+    try {
+      // create form data for file upload
+      const formData = new FormData();
+      formData.append("organization", JSON.stringify(organization));
+      if (govtDoc) formData.append("govtDoc", govtDoc);
+
+      // Send with cookies
+      const response = await axios.post(
+        "http://localhost:4000/api/v1/ngo/verifyNgo",
+        formData,
+        {
+          withCredentials: true, // <- IMPORTANT: sends cookies automatically
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.status === 200) {
+        toast({ title: 'Submitted', description: 'NGO verification submitted successfully!' });
+        setVerifyOpen(false);
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: 'Verification failed', description: err.response?.data?.message || 'Verification failed' });
+    }
+  };
 
   // project report handlers removed from this file
+
+  // Request to accept a task (moves it to 'requested' state)
+  const handleAcceptTask = (taskId: string) => {
+    const task = availableTasks.find(t => t.id === taskId);
+    if (!task) return toast({ title: 'Task not found' });
+    // update shared mock as 'requested'
+    const updated = assignTaskToNgo(taskId, 'Green Earth NGO');
+    if (updated) {
+      // refresh local lists from shared mockTasks using current NGO display name
+      setAvailableTasks(mockTasks.filter(t => t.status === 'pending'));
+      setMyTasks(mockTasks.filter(t => t.assignedTo === ngoDisplayName || t.requestedBy === ngoDisplayName));
+      toast({ title: 'Request submitted', description: `${task.title} requested — awaiting approval` });
+    } else {
+      toast({ title: 'Request failed', description: 'Could not submit request' });
+    }
+  };
+
+  // Demo approve action (would be done by verifier in real app)
+  const handleApproveTask = (taskId: string) => {
+    const ngo = ngoDisplayName || 'Green Earth NGO';
+    const updated = approveTask(taskId, ngo);
+    if (updated) {
+      setAvailableTasks(mockTasks.filter(t => t.status === 'pending'));
+      setMyTasks(mockTasks.filter(t => t.assignedTo === ngo));
+      toast({ title: 'Task approved', description: `${updated.title} is now assigned` });
+    }
+  };
+
+  // Poll shared mockTasks to stay in sync across tabs (demo only)
+  useEffect(() => {
+    const id = setInterval(() => {
+      setAvailableTasks(mockTasks.filter(t => t.status === 'pending'));
+      setMyTasks(mockTasks.filter(t => t.assignedTo === ngoDisplayName || t.requestedBy === ngoDisplayName));
+    }, 2000);
+    return () => clearInterval(id);
+  }, [ngoDisplayName]);
+
+  // when logged-in user display name becomes available, sync lists
+  useEffect(() => {
+    setAvailableTasks(mockTasks.filter(t => t.status === 'pending'));
+    setMyTasks(mockTasks.filter(t => t.assignedTo === ngoDisplayName || t.requestedBy === ngoDisplayName));
+  }, [ngoDisplayName]);
 
   const totalCreditsEarned = myCredits.reduce((sum, credit) => sum + credit.amount, 0);
   const availableCredits = myCredits.filter(c => c.status === 'available').reduce((sum, c) => sum + c.amount, 0);
@@ -194,13 +284,7 @@ const handleVerifyNgo = async (e: React.FormEvent) => {
                     <DialogTitle>Verify NGO</DialogTitle>
                     <DialogDescription>Provide official details to verify this NGO.</DialogDescription>
                   </DialogHeader>
-                  {/* lightweight inline form for quick verification submission */}
-                  <form
-                    onSubmit={(e) => {
-                     handleVerifyNgo(e);
-                    }}
-                    className="grid gap-3 py-2"
-                  >
+                  <form onSubmit={(e) => { handleVerifyNgo(e); }} className="grid gap-3 py-2">
                     <div>
                       <Label htmlFor="ngoName">Name of NGO</Label>
                       <Input id="ngoName" value={ngoName} onChange={(e) => { setNgoName(e.target.value); clearError('ngoName'); }} placeholder="e.g., Green Earth NGO" />
@@ -212,12 +296,7 @@ const handleVerifyNgo = async (e: React.FormEvent) => {
                         <SelectTrigger id="ngoType" className="w-full">
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
-                        <SelectContent
-                          position="popper"
-                          sideOffset={6}
-                          align="start"
-                          className="z-50 min-w-[12rem] bg-white text-slate-900 rounded-md shadow-lg ring-1 ring-slate-200 p-1"
-                        >
+                        <SelectContent position="popper" sideOffset={6} align="start" className="z-50 min-w-[12rem] bg-white text-slate-900 rounded-md shadow-lg ring-1 ring-slate-200 p-1">
                           <SelectItem value="NGO">NGO</SelectItem>
                           <SelectItem value="PANCHAYAT">PANCHAYAT</SelectItem>
                           <SelectItem value="COMMUNITY">COMMUNITY</SelectItem>
@@ -236,12 +315,7 @@ const handleVerifyNgo = async (e: React.FormEvent) => {
                     </div>
                     <div>
                       <Label htmlFor="govtDoc">Govt Document (PDF)</Label>
-                      <Input
-                        id="govtDoc"
-                        type="file"
-                        accept="application/pdf"
-                        onChange={(e) => { setGovtDoc(e.target.files?.[0] ?? null); clearError('govtDoc'); }}
-                      />
+                      <Input id="govtDoc" type="file" accept="application/pdf" onChange={(e) => { setGovtDoc(e.target.files?.[0] ?? null); clearError('govtDoc'); }} />
                       {errors.govtDoc && <p className="text-sm text-red-600 mt-1">{errors.govtDoc}</p>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -267,7 +341,7 @@ const handleVerifyNgo = async (e: React.FormEvent) => {
           </div>
 
           <div className="grid gap-4">
-            {availableTasks.map((task) => (
+            {availableTasks.filter(t => t.status === 'pending').map((task) => (
               <Card key={task.id} className="border-green-200 hover:shadow-lg transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex justify-between items-start">
@@ -281,17 +355,27 @@ const handleVerifyNgo = async (e: React.FormEvent) => {
                         <Badge variant="outline">{task.treeCount} trees</Badge>
                         <Badge variant="outline">Est. {Math.floor(task.treeCount * 0.75)} credits</Badge>
                         <Badge variant="outline">Species: {task.species.join(', ')}</Badge>
+                        {mrvByProject[task.id] && (
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-700">
+                            Submitted
+                          </Badge>
+                        )}
+                        {task.status === 'requested' && (
+                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700">Requested</Badge>
+                        )}
                       </div>
                       <p className="text-sm text-gray-600">
                         Created by {task.createdBy} on {task.createdDate}
                       </p>
                     </div>
-                    <Button 
-                      onClick={() => handleAcceptTask(task.id)}
-                      className="bg-green-600 hover:bg-green-700 ml-4"
-                    >
-                      Accept Task
-                    </Button>
+                    {task.status === 'pending' && (
+                      <Button 
+                        onClick={() => handleAcceptTask(task.id)}
+                        className="bg-green-600 hover:bg-green-700 ml-4"
+                      >
+                        Accept Task
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -299,60 +383,7 @@ const handleVerifyNgo = async (e: React.FormEvent) => {
 
           </div>
 
-          <div className="grid gap-4">
-            {myTasks.map((task) => (
-              <Card key={task.id} className={`${
-                task.status === 'active' ? 'border-blue-200' : 
-                task.status === 'completed' ? 'border-green-200' : 'border-gray-200'
-              }`}>
-                <CardContent className="p-6">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg mb-2">{task.title}</h3>
-                      <div className="flex items-center text-gray-600 mb-2">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        {task.location}
-                      </div>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        <Badge variant={
-                          task.status === 'active' ? 'default' : 
-                          task.status === 'completed' ? 'secondary' : 'outline'
-                        }>
-                          {task.status}
-                        </Badge>
-                        <Badge variant="outline">{task.treeCount} trees</Badge>
-                        {task.carbonCredits && (
-                          <Badge variant="outline" className="bg-green-50 text-green-700">
-                            {task.carbonCredits} credits earned
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        Started: {task.createdDate}
-                        {task.completedDate && ` • Completed: ${task.completedDate}`}
-                      </p>
-                    </div>
-                    <div className="ml-4">
-                      {task.status === 'active' && (
-                        <Button 
-                          onClick={() => alert('Open project report form (mock)')}
-                          className="bg-blue-600 hover:bg-blue-700"
-                        >
-                          <Camera className="w-4 h-4 mr-2" />
-                          Submit Report
-                        </Button>
-                      )}
-                      {task.status === 'completed' && (
-                        <Badge variant="secondary" className="bg-orange-100 text-orange-700">
-                          Under Verification
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {/* My Tasks are shown in the separate "mytasks" tab */}
         </TabsContent>
 
         <TabsContent value="wallet" className="space-y-6">
@@ -439,6 +470,80 @@ const handleVerifyNgo = async (e: React.FormEvent) => {
           </Card>
         </TabsContent>
 
+        <TabsContent value="mytasks" className="space-y-6">
+          <h2 className="text-2xl font-bold">My Tasks</h2>
+          <div className="grid gap-4">
+            {myTasks.map((task) => {
+              const record = mrvByProject[task.id];
+              const isSubmitted = !!record;
+              const statusLabel = record?.status ?? task.status;
+              return (
+                <Card key={task.id} className={`${
+                  task.status === 'active' ? 'border-blue-200' : 
+                  task.status === 'completed' ? 'border-green-200' : 'border-gray-200'
+                }`}>
+                  <CardContent className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg mb-2">{task.title}</h3>
+                        <div className="flex items-center text-gray-600 mb-2">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          {task.location}
+                        </div>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <Badge variant={
+                            task.status === 'active' ? 'default' : 
+                            task.status === 'completed' ? 'secondary' : 'outline'
+                          }>
+                            {task.status}
+                          </Badge>
+                          <Badge variant="outline">{task.treeCount} trees</Badge>
+                          {task.carbonCredits && (
+                            <Badge variant="outline" className="bg-green-50 text-green-700">
+                              {task.carbonCredits} credits earned
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          Started: {task.createdDate}
+                          {task.completedDate && ` • Completed: ${task.completedDate}`}
+                        </p>
+                      </div>
+                      <div className="ml-4">
+                        {task.status === 'active' && (
+                          <div className="flex flex-col gap-2">
+                            {isSubmitted ? (
+                              <div>
+                                <div className="text-sm text-gray-600">Under Verification • Status: {statusLabel}</div>
+                                {statusLabel === 'Validated' ? (
+                                  <Badge variant="default" className="bg-green-100 text-green-700">Verified</Badge>
+                                ) : (
+                                  <>
+                                    <Badge variant="secondary" className="bg-green-100 text-green-700">Report submitted</Badge>
+                                    <Badge variant="outline" className="bg-orange-50 text-orange-700">Under Verification</Badge>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <Button 
+                                onClick={() => openMrvFor(task.id)}
+                                className="bg-blue-600 hover:bg-blue-700"
+                              >
+                                <Camera className="w-4 h-4 mr-2" />
+                                Submit Report
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </TabsContent>
+
         <TabsContent value="profile" className="space-y-6">
           <h2 className="text-2xl font-bold">NGO Profile</h2>
           
@@ -499,7 +604,22 @@ const handleVerifyNgo = async (e: React.FormEvent) => {
             </Card>
           </div>
         </TabsContent>
+        
       </Tabs>
+      <MRVReportModal
+        open={mrvOpen}
+        onOpenChange={(open) => setMrvOpen(open)}
+        projectId={mrvProjectId}
+        ngoRegistrationId={currentUserId ?? 'NGO-2024-GE-001'}
+        onSuccess={(record) => {
+            // normalize key: prefer projectId (ObjectId) or externalProjectId
+            const key = record?.projectId ?? record?.externalProjectId;
+            if (key) {
+              setMrvByProject(prev => ({ ...prev, [key]: record }));
+              setMyTasks(prev => prev.map(t => t.id === key ? { ...t, status: 'completed', completedDate: new Date().toLocaleDateString() } : t));
+            }
+        }}
+      />
     </div>
   );
 }

@@ -20,15 +20,17 @@ const cloudinary = require("./config/cloudinary");
 const govRoutes = require("./router/Gov");
 const ngoRoutes = require("./router/Ngo");
 const compRoutes = require("./router/Comp");
+const mrvRoutes = require("./router/Mrv");
 
 // Middleware setup
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-// app.use(fileUpload({
-//     useTempFiles: true,
-//     tempFileDir: '/tmp/',
-// }));
+app.use(fileUpload({
+    useTempFiles: true,
+    tempFileDir: process.env.TEMP || './tmp',
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+}));
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -51,6 +53,7 @@ app.use(cors({
 app.use("/api/v1/gov", govRoutes);
 app.use("/api/v1/ngo", ngoRoutes);
 app.use("/api/v1/company", compRoutes);
+app.use("/api/v1/mrv", mrvRoutes);
 app.get("/api/v1/auth/me", auth, (req, res) => {
   res.json({ user: req.user });
 });

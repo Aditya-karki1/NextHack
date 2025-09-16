@@ -1,11 +1,13 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
 export default function RegisterCorporate() {
   const { login } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
@@ -16,7 +18,7 @@ export default function RegisterCorporate() {
     e.preventDefault();
 
     if (!name || !email || !password) {
-      alert("Please fill in all fields");
+      toast({ title: 'Missing fields', description: 'Please fill in all fields' });
       return;
     }
 
@@ -29,7 +31,7 @@ export default function RegisterCorporate() {
       navigate("/corporate");
     } catch (err) {
       console.error(err);
-      alert("Registration failed");
+      toast({ title: 'Registration failed', description: 'Registration failed' });
     }
   };
 

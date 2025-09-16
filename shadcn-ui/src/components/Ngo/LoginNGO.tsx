@@ -2,9 +2,11 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useToast } from '@/hooks/use-toast';
 
 export default function LoginNGO() {
   const { login } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/ngo";
@@ -16,11 +18,11 @@ export default function LoginNGO() {
     e.preventDefault();
 
     if (!email || !password) {
-      alert("Please fill all fields");
+      toast({ title: 'Missing fields', description: 'Please fill all fields' });
       return;
     }
 
-    await login("NGO", { email, password });
+  await login("NGO", { email, password });
     navigate(from, { replace: true });
   };
 

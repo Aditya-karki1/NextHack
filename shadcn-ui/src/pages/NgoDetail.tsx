@@ -2,12 +2,14 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from '@/hooks/use-toast';
 import { Button } from "@/components/ui/button";
 
 export default function NgoDetail() {
   const { ngoId } = useParams<{ ngoId: string }>();
   const [ngo, setNgo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchNgo = async () => {
@@ -31,8 +33,8 @@ export default function NgoDetail() {
         credentials: "include",
       });
       const data = await res.json();
-      setNgo(data.ngo);
-      alert("KYC Status updated to VERIFIED");
+  setNgo(data.ngo);
+  toast({ title: 'Verified', description: 'KYC Status updated to VERIFIED' });
     } catch (err) {
       console.error(err);
     }

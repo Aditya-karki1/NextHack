@@ -7,9 +7,11 @@ export interface Task {
   coordinates: { lat: number; lng: number };
   treeCount: number;
   species: string[];
-  status: 'pending' | 'active' | 'completed' | 'verified';
+  status: 'pending' | 'requested' | 'active' | 'completed' | 'verified';
   createdBy: string;
   assignedTo?: string;
+  requestedBy?: string;
+  approvalStatus?: 'requested' | 'approved' | 'rejected';
   createdDate: string;
   completedDate?: string;
   carbonCredits?: number;
@@ -86,6 +88,33 @@ export const mockTasks: Task[] = [
     carbonCredits: 375
   }
 ];
+
+// Persist mockTasks to localStorage so demo state survives page reloads
+function saveMockTasksToStorage() {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('mockTasks', JSON.stringify(mockTasks));
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Load persisted tasks if available (run-time only)
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const raw = window.localStorage.getItem('mockTasks');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // replace contents of mockTasks with persisted version
+        mockTasks.splice(0, mockTasks.length, ...parsed as Task[]);
+      }
+    }
+  }
+} catch (e) {
+  // ignore
+}
 
 export const mockCarbonCredits: CarbonCredit[] = [
   {
@@ -177,3 +206,23 @@ export const mockBlockchainTransactions = [
     gasUsed: '0.001 ETH'
   }
 ];
+
+// Helper to mutate mock tasks at runtime (useful for local dev/demo to simulate
+// a task being accepted by an NGO so other clients in the same app instance
+// won't show it as available).
+export function assignTaskToNgo(taskId: string, ngoName: string) {
+  const idx = mockTasks.findIndex(t => t.id === taskId);
+  if (idx === -1) return null;
+  // For now auto-approve requests: mark as active and assigned
+  mockTasks[idx] = { ...mockTasks[idx], status: 'active', assignedTo: ngoName, requestedBy: ngoName, approvalStatus: 'approved' };
+  saveMockTasksToStorage();
+  return mockTasks[idx];
+}
+
+export function approveTask(taskId: string, ngoName: string) {
+  const idx = mockTasks.findIndex(t => t.id === taskId);
+  if (idx === -1) return null;
+  mockTasks[idx] = { ...mockTasks[idx], status: 'active', assignedTo: ngoName, requestedBy: ngoName, approvalStatus: 'approved' };
+  saveMockTasksToStorage();
+  return mockTasks[idx];
+}
