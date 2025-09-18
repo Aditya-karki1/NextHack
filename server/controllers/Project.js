@@ -1,7 +1,8 @@
 const RestorationProject = require('../models/RestorationProject');
 const { uploadToCloudinary } = require('../middlewares/upload');
 const Ngo = require('../models/Ngo');
-
+const mongoose = require('mongoose');
+const ngo = require('../models/Ngo');
 // Create Project
 exports.createProject = async (req, res) => {
   try {
@@ -30,7 +31,7 @@ exports.createProject = async (req, res) => {
       targetTrees: parseInt(req.body.targetTrees),
       startDate: new Date(req.body.startDate),
       endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
-      status: 'Assigned',
+      status: 'Created',
       landImages: imageUrls,
       greeneryPercentage: req.body.greeneryPercentage || 0,
       co2Level: req.body.co2Level || 0
@@ -54,18 +55,22 @@ exports.getAllNGOs = async (req, res) => {
   }
 };
 
-// Get All Projects
+// Get All Projects with NGO details
 exports.getAllProjects = async (req, res) => {
   try {
     console.log("Fetching all projects");
-    
-    const projects = await RestorationProject.find(); // ✅ Populate NGO details if needed
+
+    const projects = await RestorationProject.find()
+      .populate("ngoId", "name email") // <-- populate only the name and email fields
+
     console.log("Projects fetched:", projects.length);
     res.status(200).json({ success: true, projects });
   } catch (err) {
+    console.error("Error fetching projects:", err);
     res.status(500).json({ success: false, message: "Error fetching projects" });
   }
 };
+
 
 // Assign Project to NGO
 exports.assignProject = async (req, res) => {
@@ -84,4 +89,47 @@ console.log("Assigned project:", project);
   } catch (err) {
     res.status(500).json({ success: false, message: "Error assigning project" });
   }
+};
+
+// Controller to handle an NGO requesting a project
+exports.requestProject = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { requestedBy } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: "Invalid project ID." });
+        }
+        if (!mongoose.Types.ObjectId.isValid(requestedBy)) {
+            return res.status(400).json({ success: false, message: "Invalid user ID." });
+        }
+
+        const project = await RestorationProject.findById(id);
+        if (!project) {
+            return res.status(404).json({ success: false, message: "Project not found." });
+        }
+
+        // Check if the NGO has already requested
+        if (project.requestedBy.includes(requestedBy)) {
+            return res.status(409).json({ success: false, message: "You have already requested this project." });
+        }
+
+        // Push NGO ID into requestedBy array
+        project.requestedBy.push(requestedBy);
+
+        // Optionally: Only mark as 'Assigned' when one NGO is approved
+        // project.status = 'Assigned'; 
+
+        await project.save();
+
+        res.status(200).json({
+            success: true,
+            message: "Project request submitted successfully.",
+            data: project
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: "Server error." });
+    }
 };

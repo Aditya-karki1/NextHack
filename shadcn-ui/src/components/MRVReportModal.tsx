@@ -17,6 +17,8 @@ type Props = {
 
 export default function MRVReportModal({ open, onOpenChange, projectId, ngoRegistrationId, onSuccess }: Props) {
   const { toast } = useToast();
+  console.log("MRVReportModal ngoRegistrationId:", ngoRegistrationId);
+  console.log("MRVReportModal projectId:", projectId);
   const [dateReported, setDateReported] = useState<string>(new Date().toISOString().slice(0,10));
   const [treeCount, setTreeCount] = useState<number | ''>('');
   const [files, setFiles] = useState<File[]>([]);

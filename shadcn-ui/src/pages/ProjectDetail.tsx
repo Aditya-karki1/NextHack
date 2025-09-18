@@ -1,9 +1,7 @@
-// pages/ProjectDetail.tsx
 import { useEffect, useState, useRef } from "react";
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from "@/hooks/use-toast";
 import { useParams, useNavigate } from "react-router-dom";
-
-/// <reference types="@types/google.maps" />
+import cv from "@techstark/opencv-js";
 
 interface Project {
   _id: string;
@@ -19,25 +17,45 @@ interface Project {
   idleLand?: number;
 }
 
+interface RegionAnalysis {
+  id: number;
+  greenPercent: number;
+  idlePercent: number;
+  treeCount: number;
+  insights?: {
+    climateBenefits?: string;
+    risks?: string;
+    suggestions?: string;
+  };
+}
+
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const { toast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
-
-  // Auto map analysis
-  const [autoGreenCover, setAutoGreenCover] = useState<number | null>(null);
-  const [autoIdleLand, setAutoIdleLand] = useState<number | null>(null);
-
-  // Uploaded image analysis
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [cvReady, setCvReady] = useState(false);
+  const [regionAnalyses, setRegionAnalyses] = useState<RegionAnalysis[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedGreenCover, setUploadedGreenCover] = useState<number | null>(null);
   const [uploadedIdleLand, setUploadedIdleLand] = useState<number | null>(null);
+  const [uploadedTreeCount, setUploadedTreeCount] = useState<number | null>(null);
 
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const navigate = useNavigate();
   const mapRef = useRef<google.maps.Map>();
+  const drawingManagerRef = useRef<google.maps.drawing.DrawingManager>();
+  const navigate = useNavigate();
 
-  // Fetch project details
+  // ✅ OpenCV Initialization
+  useEffect(() => {
+    if (cv && cv.onRuntimeInitialized) {
+      cv.onRuntimeInitialized = () => {
+        setCvReady(true);
+        console.log("OpenCV.js is ready!");
+      };
+    }
+  }, []);
+
+  // ✅ Fetch project details
   useEffect(() => {
     const fetchProject = async () => {
       try {
@@ -45,36 +63,19 @@ export default function ProjectDetail() {
           credentials: "include",
         });
         const data = await res.json();
-        setProject(
-          data.project || {
-            _id: "",
-            title: "",
-            areaHectares: 0,
-            targetTrees: 0,
-            description: "",
-            landImages: [],
-          }
-        );
+        setProject(data.project || null);
       } catch (err) {
         console.error("Failed to fetch project:", err);
-        setProject({
-          _id: "",
-          title: "",
-          areaHectares: 0,
-          targetTrees: 0,
-          description: "",
-          landImages: [],
-        });
       }
     };
     fetchProject();
   }, [projectId]);
 
-  // Load Google Maps only after project is available
+  // ✅ Load Google Maps + Drawing Library
   useEffect(() => {
     if (project && project.location && !mapLoaded) {
       const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCpzV2uci8gLyp8si2idL0Gy1PLUe_J8bU`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCpzV2uci8gLyp8si2idL0Gy1PLUe_J8bU&libraries=drawing`;
       script.async = true;
       script.onload = () => initMap();
       document.body.appendChild(script);
@@ -82,92 +83,151 @@ export default function ProjectDetail() {
     }
   }, [project, mapLoaded]);
 
+  // ✅ Initialize Map & Drawing Tool
   const initMap = () => {
-    if (!project || !project.location) return;
-
+    if (!project?.location) return;
     const [lng, lat] = project.location.coordinates;
 
     mapRef.current = new google.maps.Map(document.getElementById("map") as HTMLElement, {
       center: { lat, lng },
-      zoom: 15,
+      zoom: 14,
     });
 
-    // Add marker
-    new google.maps.Marker({
-      position: { lat, lng },
-      map: mapRef.current,
-      title: project.title,
+    new google.maps.Marker({ position: { lat, lng }, map: mapRef.current, title: project.title });
+
+    drawingManagerRef.current = new google.maps.drawing.DrawingManager({
+      drawingMode: google.maps.drawing.OverlayType.RECTANGLE,
+      drawingControl: true,
+      drawingControlOptions: {
+        position: google.maps.ControlPosition.TOP_CENTER,
+        drawingModes: ["rectangle"],
+      },
     });
 
-    // Optional: Draw a circle representing green cover if available
-    if (autoGreenCover !== null) {
-      new google.maps.Circle({
-        strokeColor: "#00FF00",
-        strokeOpacity: 0.8,
-        strokeWeight: 2,
-        fillColor: "#00FF00",
-        fillOpacity: Math.min(autoGreenCover / 100, 1),
-        map: mapRef.current,
-        center: { lat, lng },
-        radius: Math.sqrt(project.areaHectares * 10000 / Math.PI),
-      });
+    drawingManagerRef.current.setMap(mapRef.current);
+
+    google.maps.event.addListener(drawingManagerRef.current, "overlaycomplete", (event) => {
+      const bounds = (event.overlay as google.maps.Rectangle).getBounds();
+      analyzeRegion(bounds);
+    });
+  };
+
+  // ✅ Analyze Region on Map
+  const analyzeRegion = async (bounds: google.maps.LatLngBounds) => {
+    if (!cvReady) {
+      alert("OpenCV is still loading. Try again.");
+      return;
     }
 
-    // Auto analyze green cover from satellite image
+    const centerLat = bounds.getCenter().lat();
+    const centerLng = bounds.getCenter().lng();
     const proxyUrl = "https://gmap-sih-img-proxy.vipulchaturvedi.workers.dev/";
-    const imgUrl = `${proxyUrl}?center=${lat},${lng}&zoom=15&size=640x640&key=YOUR_API_KEY`;
+    const imgUrl = `${proxyUrl}?center=${centerLat},${centerLng}&zoom=15&size=640x640&key=YOUR_API_KEY`;
 
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.src = imgUrl;
-    img.onload = () => analyzeImgData(img, setAutoGreenCover, setAutoIdleLand);
+
+    img.onload = async () => {
+      const { greenPercent, idlePercent, treeCount } = analyzeImgData(img);
+
+      let insights = { climateBenefits: "", risks: "", suggestions: "" };
+      try {
+        const response = await fetch("http://localhost:5000/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ greenCover: greenPercent, idleLand: idlePercent }),
+        });
+        const data = await response.json();
+        insights = data.analysis || {};
+      } catch (err) {
+        console.error(err);
+      }
+
+      setRegionAnalyses((prev) => [
+        ...prev,
+        { id: prev.length + 1, greenPercent, idlePercent, treeCount, insights },
+      ]);
+    };
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) setUploadedFile(e.target.files[0]);
-  };
-
-  const analyzeImage = () => {
-    if (uploadedFile) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const img = new Image();
-        img.src = reader.result as string;
-        img.onload = () => analyzeImgData(img, setUploadedGreenCover, setUploadedIdleLand);
-      };
-      reader.readAsDataURL(uploadedFile);
-      return;
-    }
-    toast({ title: 'No image selected', description: 'Please select an image to analyze.' });
-  };
-
-  const analyzeImgData = (
-    img: HTMLImageElement,
-    setGreen: (val: number) => void,
-    setIdle: (val: number) => void
-  ) => {
+  // ✅ ExG + Otsu + Contours Detection
+  const analyzeImgData = (img: HTMLImageElement) => {
     const canvas = document.createElement("canvas");
     canvas.width = img.width;
     canvas.height = img.height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) return { greenPercent: 0, idlePercent: 0, treeCount: 0 };
 
     ctx.drawImage(img, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    let greenPixels = 0;
-    for (let i = 0; i < imageData.data.length; i += 4) {
-      if (imageData.data[i + 1] > 100) greenPixels++;
-    }
+    // ✅ Fix: Use cv.imread() with a temporary canvas element
+    // This is the correct method for browser environments
+    document.body.appendChild(canvas);
+    const src = cv.imread(canvas);
 
-    const totalPixels = canvas.width * canvas.height;
+    let bgr = new cv.Mat();
+    cv.cvtColor(src, bgr, cv.COLOR_RGBA2BGR);
+
+    let channels = new cv.MatVector();
+    cv.split(bgr, channels);
+    let R = channels.get(2), G = channels.get(1), B = channels.get(0);
+
+    // ✅ Excess Green Index: 2G - R - B
+    let exg = new cv.Mat();
+    cv.addWeighted(G, 2, R, -1, 0, exg);
+    cv.addWeighted(exg, 1, B, -1, 0, exg);
+
+    // Normalize & Otsu Thresholding
+    cv.normalize(exg, exg, 0, 255, cv.NORM_MINMAX);
+    exg.convertTo(exg, cv.CV_8U);
+    let binary = new cv.Mat();
+    cv.threshold(exg, binary, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
+
+    // ✅ Contour detection for tree count
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    const totalPixels = img.width * img.height;
+    const greenPixels = cv.countNonZero(binary);
     const greenPercent = Number(((greenPixels / totalPixels) * 100).toFixed(2));
-    const idlePercent = Number((100 - greenPercent).toFixed(2));
+    const treeCount = contours.size();
 
-    setGreen(greenPercent);
-    setIdle(idlePercent);
+    // Cleanup
+    src.delete();
+    bgr.delete();
+    R.delete();
+    G.delete();
+    B.delete();
+    exg.delete();
+    binary.delete();
+    contours.delete();
+    hierarchy.delete();
+    document.body.removeChild(canvas);
+
+    return { greenPercent, idlePercent: Number((100 - greenPercent).toFixed(2)), treeCount };
   };
 
+  // ✅ Analyze Uploaded Image
+  const analyzeImage = () => {
+    if (!uploadedFile) return toast({ title: "No image", description: "Select an image first." });
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const img = new Image();
+      img.src = reader.result as string;
+      img.onload = () => {
+        const { greenPercent, idlePercent, treeCount } = analyzeImgData(img);
+        setUploadedGreenCover(greenPercent);
+        setUploadedIdleLand(idlePercent);
+        setUploadedTreeCount(treeCount);
+      };
+    };
+    reader.readAsDataURL(uploadedFile);
+  };
+
+  // ✅ Save Analysis
   const saveAnalysis = async () => {
     if (!project || uploadedGreenCover === null || uploadedIdleLand === null) return;
     try {
@@ -175,16 +235,13 @@ export default function ProjectDetail() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          greenCover: uploadedGreenCover,
-          idleLand: uploadedIdleLand,
-        }),
+        body: JSON.stringify({ greenCover: uploadedGreenCover, idleLand: uploadedIdleLand }),
       });
-      toast({ title: 'Saved', description: 'Uploaded analysis saved successfully!' });
+      toast({ title: "Saved", description: "Analysis saved successfully!" });
       navigate("/government");
     } catch (err) {
       console.error(err);
-      toast({ title: 'Save failed', description: 'Failed to save analysis.' });
+      toast({ title: "Error", description: "Failed to save analysis." });
     }
   };
 
@@ -194,47 +251,26 @@ export default function ProjectDetail() {
     <div className="p-6">
       <h1 className="text-3xl font-bold">{project.title}</h1>
       <p className="my-2">{project.description}</p>
-      <p>
-        Area: {project.areaHectares} hectares | Target Trees: {project.targetTrees}
-      </p>
-      <p>
-        Location: {project.location?.coordinates?.[1] ?? "N/A"}, {project.location?.coordinates?.[0] ?? "N/A"}
-      </p>
-
-      <div className="flex flex-wrap gap-4 my-4">
-        {project.landImages && project.landImages.length > 0 ? (
-          project.landImages.map((img, idx) => (
-            <img
-              key={idx}
-              src={img.startsWith("http") ? img : `http://localhost:4000/${img}`}
-              alt={`Project ${idx + 1}`}
-              className="w-1/2 rounded shadow"
-            />
-          ))
-        ) : (
-          <p>No images uploaded for this project.</p>
-        )}
-      </div>
+      <p>Area: {project.areaHectares} hectares | Target Trees: {project.targetTrees}</p>
 
       <div id="map" style={{ height: "500px", width: "90%", margin: "20px auto", border: "1px solid #ccc" }} />
 
-      {/* Auto analysis display */}
-      {autoGreenCover !== null && autoIdleLand !== null && (
-        <div className="my-4 p-4 bg-green-100 rounded">
-          <h2 className="font-bold">🌐 Auto Analysis (from Map)</h2>
-          <p>🌳 Green Cover: {autoGreenCover}%</p>
-          <p>🏜️ Idle Land: {autoIdleLand}%</p>
+      {regionAnalyses.map((region) => (
+        <div key={region.id} className="my-4 p-4 bg-green-100 rounded">
+          <h2 className="font-bold">Region {region.id}</h2>
+          <p>🌳 Green Cover: {region.greenPercent}%</p>
+          <p>🏜️ Idle Land: {region.idlePercent}%</p>
+          <p>🌲 Tree Count: {region.treeCount}</p>
+          <p>🌍 Climate Benefits: {region.insights?.climateBenefits || "N/A"}</p>
+          <p>⚠️ Risks: {region.insights?.risks || "N/A"}</p>
+          <p>💡 Suggestions: {region.insights?.suggestions || "N/A"}</p>
         </div>
-      )}
+      ))}
 
-      {/* Uploaded image analysis */}
       <div className="my-4">
-        <input type="file" accept="image/*" onChange={handleFileChange} />
-        <button
-          onClick={analyzeImage}
-          className="ml-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-        >
-          Analyze Green Cover
+        <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && setUploadedFile(e.target.files[0])} />
+        <button onClick={analyzeImage} className="ml-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+          Analyze Uploaded Image
         </button>
       </div>
 
@@ -243,10 +279,8 @@ export default function ProjectDetail() {
           <h2 className="font-bold">📤 Uploaded Image Analysis</h2>
           <p>🌳 Green Cover: {uploadedGreenCover}%</p>
           <p>🏜️ Idle Land: {uploadedIdleLand}%</p>
-          <button
-            onClick={saveAnalysis}
-            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
+          <p>🌲 Tree Count: {uploadedTreeCount}</p>
+          <button onClick={saveAnalysis} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
             Save Uploaded Analysis
           </button>
         </div>

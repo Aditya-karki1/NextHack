@@ -1,11 +1,11 @@
 const mongoose = require('mongoose');
 
 const projectSchema = new mongoose.Schema({
-  title: { type: String, required: true, trim: true },  // Added project title
+  title: { type: String, required: true, trim: true },
 
-  governmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  ngoId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  
+  governmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Government', required: true },
+  ngoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ngo' },
+
   location: {
     type: {
       type: String,
@@ -23,17 +23,20 @@ const projectSchema = new mongoose.Schema({
   targetTrees: { type: Number, required: true },
   startDate: { type: Date, required: true },
   endDate: { type: Date },
-  status: { type: String, enum: ['Assigned', 'InProgress', 'Completed', 'Verified'], default: 'Assigned' },
+  status: { type: String, enum: ['Created', 'Assigned', 'InProgress', 'Completed', 'Verified'], default: 'Created' },
 
-  // Optional fields
-  landImages: [{ type: String }],          // Array of image URLs (Cloudinary / S3 / IPFS)
-  greeneryPercentage: { type: Number },    // Optional: 0-100
-  co2Level: { type: Number },              // Optional: measured CO2 level in the area
+  requestedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Ngo' }],
+
+  landImages: [{ type: String }],
+  greeneryPercentage: { type: Number },
+  co2Level: { type: Number },
+
+  // NEW: Array of MRV record IDs
+  hasMRVReport: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MRVRecord' }],
 
   createdAt: { type: Date, default: Date.now }
 });
 
-// Optional: create 2dsphere index for geospatial queries
 projectSchema.index({ location: '2dsphere' });
 
 module.exports = mongoose.model('RestorationProject', projectSchema);

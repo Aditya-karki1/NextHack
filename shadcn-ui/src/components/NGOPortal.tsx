@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,35 +16,64 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { MapPin, Wallet, CheckCircle, Clock, Camera, Coins } from 'lucide-react';
-import { mockTasks, mockCarbonCredits, assignTaskToNgo, approveTask, type Task, type CarbonCredit } from '@/lib/mockData';
 import axios from 'axios';
-import { useEffect } from 'react';
 import MRVReportModal from './MRVReportModal';
 
+// Mock data types and functions for a clean example, assuming these are in '@/lib/mockData'
+type Task = {
+  id: string;
+  title: string;
+  location: string;
+  treeCount: number;
+  species?: string[];
+  status: 'Created' | 'Assigned' | 'InProgress' | 'Completed' | 'Verified';
+  ngoId?: string;
+  // New field from the mongoose model to track requests
+  requestedBy?: string; 
+};
+
+type CarbonCredit = {
+  id: string;
+  location: string;
+  amount: number;
+  price: number;
+  status: 'available' | 'sold';
+  ngoName: string;
+};
+
+const mockCarbonCredits: CarbonCredit[] = [
+  { id: 'cc-001', ngoName: 'Green Earth NGO', location: 'Odisha Coastline', amount: 375, price: 15, status: 'available' },
+  { id: 'cc-002', ngoName: 'Green Earth NGO', location: 'Odisha Coastline', amount: 100, price: 15, status: 'sold' },
+];
+
+// Main component
 export default function NGOPortal() {
   const { toast } = useToast();
-  const [availableTasks, setAvailableTasks] = useState<Task[]>(mockTasks.filter(t => t.status === 'pending'));
+  const [availableTasks, setAvailableTasks] = useState<Task[]>([]);
   const [myTasks, setMyTasks] = useState<Task[]>([]);
-  const [ngoDisplayName, setNgoDisplayName] = useState<string>('Green Earth NGO');
+  const [ngoDisplayName, setNgoDisplayName] = useState<string>('');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [myCredits] = useState<CarbonCredit[]>(mockCarbonCredits.filter(c => c.ngoName === 'Green Earth NGO'));
-  // report form state removed (not used in this component)
 
   // Verification dialog & form state
   const [verifyOpen, setVerifyOpen] = useState(false);
-  const [ngoName, setNgoName] = useState('');
+  const [ngoName, setNgoName] = useState<string>('');
   const [ngoType, setNgoType] = useState<string | undefined>(undefined);
   const [govtDoc, setGovtDoc] = useState<File | null>(null);
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [address, setAddress] = useState('');
-  const [geoBoundary, setGeoBoundary] = useState('');
+  const [phone, setPhone] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
+  const [address, setAddress] = useState<string>('');
+  const [geoBoundary, setGeoBoundary] = useState<string>('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const clearError = (field: string) => setErrors(prev => { const copy = { ...prev }; delete (copy as any)[field]; return copy; });
+  const clearError = (field: string) => setErrors(prev => {
+    const copy = { ...prev };
+    delete (copy as any)[field];
+    return copy;
+  });
 
   const [mrvOpen, setMrvOpen] = useState(false);
   const [mrvProjectId, setMrvProjectId] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [mrvByProject, setMrvByProject] = useState<Record<string, any>>({});
 
   const openMrvFor = (projectId: string) => {
@@ -52,50 +81,87 @@ export default function NGOPortal() {
     setMrvOpen(true);
   };
 
+const fetchProjects = async (userId: string | null) => {
+  try {
+    const response = await axios.get("http://localhost:4000/api/v1/gov/projects"); 
+    console.log("Fetched projects:", response.data);
+
+    if (response.status === 200 && Array.isArray(response.data.projects)) {
+      const projects = response.data.projects.map((p: any) => ({
+        id: p._id,
+        title: p.title,
+        location: p.location.coordinates ? `${p.location.coordinates[1]}, ${p.location.coordinates[0]}` : 'N/A',
+        treeCount: p.targetTrees,
+        status: p.status,
+        ngoId: p.ngoId,
+        requestedBy: p.requestedBy || [],
+      }));
+
+      if (userId) {
+        setAvailableTasks(
+          projects.filter(t => t.status === "Created" && !t.requestedBy.includes(userId))
+        );
+
+        setMyTasks(
+          projects.filter(t => t.requestedBy.includes(userId) || t.ngoId === userId)
+        );
+      } else {
+        setAvailableTasks(projects.filter(t => t.status === "Created"));
+      }
+
+      console.log("Available tasks:", projects.filter(t => t.status === "Created" && !t.requestedBy.includes(userId)));
+    }
+  } catch (error) {
+    console.error("Failed to fetch projects:", error);
+    toast({ title: 'Error', description: 'Failed to load projects.' });
+  }
+};
+
   useEffect(() => {
     (async () => {
-      // fetch current authenticated user
+      // 1. Fetch current authenticated user
       try {
         const res = await axios.get('http://localhost:4000/api/v1/auth/me', { withCredentials: true });
         if (res.status === 200 && res.data?.user) {
-          setCurrentUserId(res.data.user._id || res.data.user.id || null);
-          // derive a display name for the NGO from available fields
+          const userId = res.data.user._id || res.data.user.id || null;
+          setCurrentUserId(userId);
           const name = res.data.user.name || res.data.user.orgName || res.data.user.registrationId || res.data.user.ngoName;
           if (name) setNgoDisplayName(name);
         }
-      } catch (err: any) {
-        console.debug('No authenticated user found', err?.response?.status ?? err?.message ?? err);
+      } catch (err) {
+        console.debug('No authenticated user found', (err as any)?.response?.status ?? (err as any)?.message ?? err);
       }
 
-      // fetch MRV for mock tasks (both available and my tasks)
+      // 2. Fetch MRV for all projects
       try {
-        const map: Record<string, any> = {};
-        const ids = Array.from(new Set([...
-          availableTasks.map(t => t.id),
-          myTasks.map(t => t.id)
-        ].flat()));
-
-        await Promise.all(ids.map(async (id) => {
-          try {
-            const res = await axios.get(`http://localhost:4000/api/v1/mrv/project/${id}`);
-            if (res.status === 200 && res.data?.records?.length) {
-              map[id] = res.data.records[0];
+        const res = await axios.get(`http://localhost:4000/api/v1/mrv/all`);
+        if (res.status === 200 && res.data?.records) {
+          const map: Record<string, any> = {};
+          res.data.records.forEach((record: any) => {
+            const key = record.projectId ?? record.externalProjectId;
+            if (key) {
+              map[key] = record;
             }
-          } catch (e) {
-            // ignore
-          }
-        }));
-        setMrvByProject(map);
+          });
+          setMrvByProject(map);
+        }
       } catch (err) {
-        // ignore
+        console.error("Failed to fetch MRV records:", err);
       }
     })();
   }, []);
 
+  // Use a separate effect to fetch projects after the user ID is set
+  useEffect(() => {
+    if (currentUserId) {
+      console.log("Fetching projects for user:", currentUserId);
+      fetchProjects(currentUserId);
+    }
+  }, [currentUserId]);
+
   const handleVerifyNgo = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // validate required fields (all except geoBoundary)
     const newErrors: Record<string, string> = {};
     if (!ngoName.trim()) newErrors.ngoName = "Name is required";
     if (!ngoType) newErrors.ngoType = "Organization type is required";
@@ -105,18 +171,16 @@ export default function NGOPortal() {
     if (!email.trim()) newErrors.email = "Email is required";
     else if (!/^\S+@\S+\.\S+$/.test(email)) newErrors.email = "Enter a valid email";
 
-    // validate file type if present
     if (govtDoc && govtDoc.type !== "application/pdf") newErrors.govtDoc = "Only PDF files are accepted";
 
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    // build organization payload matching server schema
     let parsedGeo: any = null;
     try {
       parsedGeo = geoBoundary ? JSON.parse(geoBoundary) : null;
     } catch (err) {
-      parsedGeo = geoBoundary; // raw string if invalid JSON
+      parsedGeo = geoBoundary;
     }
 
     const organization = {
@@ -132,17 +196,15 @@ export default function NGOPortal() {
     };
 
     try {
-      // create form data for file upload
       const formData = new FormData();
       formData.append("organization", JSON.stringify(organization));
       if (govtDoc) formData.append("govtDoc", govtDoc);
 
-      // Send with cookies
       const response = await axios.post(
         "http://localhost:4000/api/v1/ngo/verifyNgo",
         formData,
         {
-          withCredentials: true, // <- IMPORTANT: sends cookies automatically
+          withCredentials: true,
           headers: {
             "Content-Type": "multipart/form-data",
           },
@@ -159,53 +221,31 @@ export default function NGOPortal() {
     }
   };
 
-  // project report handlers removed from this file
-
-  // Request to accept a task (moves it to 'requested' state)
-  const handleAcceptTask = (taskId: string) => {
-    const task = availableTasks.find(t => t.id === taskId);
-    if (!task) return toast({ title: 'Task not found' });
-    // update shared mock as 'requested'
-    const updated = assignTaskToNgo(taskId, 'Green Earth NGO');
-    if (updated) {
-      // refresh local lists from shared mockTasks using current NGO display name
-      setAvailableTasks(mockTasks.filter(t => t.status === 'pending'));
-      setMyTasks(mockTasks.filter(t => t.assignedTo === ngoDisplayName || t.requestedBy === ngoDisplayName));
-      toast({ title: 'Request submitted', description: `${task.title} requested — awaiting approval` });
-    } else {
-      toast({ title: 'Request failed', description: 'Could not submit request' });
+  const handleRequestTask = async (taskId: string) => {
+    if (!currentUserId) {
+      toast({ title: 'Error', description: 'You must be logged in to request a task.' });
+      return;
+    }
+    try {
+      // API call to update the task with a request
+      const response = await axios.put(
+        `http://localhost:4000/api/v1/gov/projects/${taskId}/request`,
+        { requestedBy: currentUserId },
+        { withCredentials: true }
+      );
+      if (response.status === 200) {
+        toast({ title: 'Request Submitted', description: `Request for task has been submitted.` });
+        fetchProjects(currentUserId); // Refresh the task lists
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: 'Request Failed', description: err.response?.data?.message || 'Could not request task.' });
     }
   };
-
-  // Demo approve action (would be done by verifier in real app)
-  const handleApproveTask = (taskId: string) => {
-    const ngo = ngoDisplayName || 'Green Earth NGO';
-    const updated = approveTask(taskId, ngo);
-    if (updated) {
-      setAvailableTasks(mockTasks.filter(t => t.status === 'pending'));
-      setMyTasks(mockTasks.filter(t => t.assignedTo === ngo));
-      toast({ title: 'Task approved', description: `${updated.title} is now assigned` });
-    }
-  };
-
-  // Poll shared mockTasks to stay in sync across tabs (demo only)
-  useEffect(() => {
-    const id = setInterval(() => {
-      setAvailableTasks(mockTasks.filter(t => t.status === 'pending'));
-      setMyTasks(mockTasks.filter(t => t.assignedTo === ngoDisplayName || t.requestedBy === ngoDisplayName));
-    }, 2000);
-    return () => clearInterval(id);
-  }, [ngoDisplayName]);
-
-  // when logged-in user display name becomes available, sync lists
-  useEffect(() => {
-    setAvailableTasks(mockTasks.filter(t => t.status === 'pending'));
-    setMyTasks(mockTasks.filter(t => t.assignedTo === ngoDisplayName || t.requestedBy === ngoDisplayName));
-  }, [ngoDisplayName]);
-
+  
   const totalCreditsEarned = myCredits.reduce((sum, credit) => sum + credit.amount, 0);
   const availableCredits = myCredits.filter(c => c.status === 'available').reduce((sum, c) => sum + c.amount, 0);
-  const completedProjects = myTasks.filter(t => t.status === 'completed').length;
+  const completedProjects = myTasks.filter(t => t.status === 'Completed').length;
 
   return (
     <div className="space-y-6">
@@ -228,7 +268,7 @@ export default function NGOPortal() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-blue-100 text-sm">Active Tasks</p>
-                <p className="text-3xl font-bold">{myTasks.filter(t => t.status === 'active').length}</p>
+                <p className="text-3xl font-bold">{myTasks.filter(t => t.status === 'InProgress').length}</p>
               </div>
               <Clock className="w-8 h-8 text-blue-200" />
             </div>
@@ -284,7 +324,7 @@ export default function NGOPortal() {
                     <DialogTitle>Verify NGO</DialogTitle>
                     <DialogDescription>Provide official details to verify this NGO.</DialogDescription>
                   </DialogHeader>
-                  <form onSubmit={(e) => { handleVerifyNgo(e); }} className="grid gap-3 py-2">
+                  <form onSubmit={handleVerifyNgo} className="grid gap-3 py-2">
                     <div>
                       <Label htmlFor="ngoName">Name of NGO</Label>
                       <Input id="ngoName" value={ngoName} onChange={(e) => { setNgoName(e.target.value); clearError('ngoName'); }} placeholder="e.g., Green Earth NGO" />
@@ -301,8 +341,8 @@ export default function NGOPortal() {
                           <SelectItem value="PANCHAYAT">PANCHAYAT</SelectItem>
                           <SelectItem value="COMMUNITY">COMMUNITY</SelectItem>
                         </SelectContent>
-                      {errors.ngoType && <p className="text-sm text-red-600 mt-1">{errors.ngoType}</p>}
                       </Select>
+                      {errors.ngoType && <p className="text-sm text-red-600 mt-1">{errors.ngoType}</p>}
                     </div>
                     <div>
                       <Label htmlFor="address">Address</Label>
@@ -340,50 +380,61 @@ export default function NGOPortal() {
             </div>
           </div>
 
-          <div className="grid gap-4">
-            {availableTasks.filter(t => t.status === 'pending').map((task) => (
-              <Card key={task.id} className="border-green-200 hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg mb-2">{task.title}</h3>
-                      <div className="flex items-center text-gray-600 mb-2">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        {task.location}
-                      </div>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        <Badge variant="outline">{task.treeCount} trees</Badge>
-                        <Badge variant="outline">Est. {Math.floor(task.treeCount * 0.75)} credits</Badge>
-                        <Badge variant="outline">Species: {task.species.join(', ')}</Badge>
-                        {mrvByProject[task.id] && (
-                          <Badge variant="secondary" className="bg-orange-100 text-orange-700">
-                            Submitted
-                          </Badge>
-                        )}
-                        {task.status === 'requested' && (
-                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700">Requested</Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        Created by {task.createdBy} on {task.createdDate}
-                      </p>
-                    </div>
-                    {task.status === 'pending' && (
-                      <Button 
-                        onClick={() => handleAcceptTask(task.id)}
-                        className="bg-green-600 hover:bg-green-700 ml-4"
-                      >
-                        Accept Task
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+         <div className="grid gap-4">
+  {availableTasks.map((task) => {
+    const hasRequested = task.requestedBy.includes(currentUserId);
 
+    return (
+      <Card key={task.id} className="border-green-200 hover:shadow-lg transition-shadow">
+        <CardContent className="p-6">
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <h3 className="font-semibold text-lg mb-2">{task.title}</h3>
+              <div className="flex items-center text-gray-600 mb-2">
+                <MapPin className="w-4 h-4 mr-1" />
+                {task.location}
+              </div>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <Badge variant="outline">{task.treeCount} trees</Badge>
+                <Badge variant="outline">Est. {Math.floor(task.treeCount * 0.75)} credits</Badge>
+                {mrvByProject[task.id] && (
+                  <Badge variant="secondary" className="bg-orange-100 text-orange-700">
+                    Submitted
+                  </Badge>
+                )}
+                {hasRequested && (
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+                    Requested
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-gray-600">
+                Created by Government Body on {new Date().toLocaleDateString()}
+              </p>
+            </div>
+
+            {/* Request Button */}
+            {task.status === 'Created' && !hasRequested && (
+              <Button
+                onClick={() => handleRequestTask(task.id)}
+                className="bg-blue-600 hover:bg-blue-700 ml-4"
+              >
+                Request Task
+              </Button>
+            )}
+
+            {hasRequested && (
+              <Button disabled className="ml-4 bg-gray-400">
+                Request Pending
+              </Button>
+            )}
           </div>
+        </CardContent>
+      </Card>
+    );
+  })}
+</div>
 
-          {/* My Tasks are shown in the separate "mytasks" tab */}
         </TabsContent>
 
         <TabsContent value="wallet" className="space-y-6">
@@ -454,7 +505,7 @@ export default function NGOPortal() {
                     <p className="text-sm text-gray-600">Jan 8, 2024</p>
                   </div>
                 </div>
-                
+
                 <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
                   <div>
                     <p className="font-medium">Credits Sold</p>
@@ -470,83 +521,108 @@ export default function NGOPortal() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="mytasks" className="space-y-6">
-          <h2 className="text-2xl font-bold">My Tasks</h2>
-          <div className="grid gap-4">
-            {myTasks.map((task) => {
-              const record = mrvByProject[task.id];
-              const isSubmitted = !!record;
-              const statusLabel = record?.status ?? task.status;
-              return (
-                <Card key={task.id} className={`${
-                  task.status === 'active' ? 'border-blue-200' : 
-                  task.status === 'completed' ? 'border-green-200' : 'border-gray-200'
-                }`}>
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg mb-2">{task.title}</h3>
-                        <div className="flex items-center text-gray-600 mb-2">
-                          <MapPin className="w-4 h-4 mr-1" />
-                          {task.location}
+  <TabsContent value="mytasks" className="space-y-6">
+  <h2 className="text-2xl font-bold">My Tasks</h2>
+  <div className="grid gap-4">
+    {myTasks.map((task) => {
+      const record = mrvByProject[task.id];
+      const isSubmitted = !!record;
+
+      const assignedToMe = task.ngoId?._id === currentUserId;
+      const assignedToSomeoneElse = task.ngoId?._id && task.ngoId._id !== currentUserId;
+      const requestedByMe = task.requestedBy?.includes(currentUserId);
+
+      // Determine status label
+      let statusLabel = task.status;
+      if (assignedToMe) statusLabel = 'Assigned to Me';
+      else if (assignedToSomeoneElse) statusLabel = 'Assigned to another NGO';
+      else if (requestedByMe) statusLabel = 'Requested';
+
+      return (
+        <Card
+          key={task.id}
+          className={`${
+            statusLabel.includes('InProgress') ? 'border-blue-200' :
+            statusLabel.includes('Completed') ? 'border-green-200' :
+            statusLabel.includes('Assigned') ? 'border-yellow-200' :
+            statusLabel.includes('Requested') ? 'border-purple-200' :
+            'border-gray-200'
+          }`}
+        >
+          <CardContent className="p-6">
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg mb-2">{task.title}</h3>
+                <div className="flex items-center text-gray-600 mb-2">
+                  <MapPin className="w-4 h-4 mr-1" />
+                  {task.location?.coordinates
+                    ? `${task.location.coordinates[1]}, ${task.location.coordinates[0]}`
+                    : 'No location'}
+                </div>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <Badge variant={
+                    statusLabel.includes('InProgress') ? 'default' :
+                    statusLabel.includes('Completed') ? 'secondary' :
+                    statusLabel.includes('Assigned') ? 'outline' :
+                    statusLabel.includes('Requested') ? 'outline' :
+                    'outline'
+                  }>
+                    {statusLabel}
+                  </Badge>
+                  <Badge variant="outline">{task.targetTrees} trees</Badge>
+                  {task.carbonCredits && (
+                    <Badge variant="outline" className="bg-green-50 text-green-700">
+                      {task.carbonCredits} credits earned
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="ml-4">
+                {assignedToMe && (
+                  <div className="flex flex-col gap-2">
+                    {isSubmitted ? (
+                      <div>
+                        <div className="text-sm text-gray-600">
+                          Under Verification • Status: {statusLabel}
                         </div>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          <Badge variant={
-                            task.status === 'active' ? 'default' : 
-                            task.status === 'completed' ? 'secondary' : 'outline'
-                          }>
-                            {task.status}
+                        {statusLabel === 'Validated' && (
+                          <Badge variant="default" className="bg-green-100 text-green-700">
+                            Verified
                           </Badge>
-                          <Badge variant="outline">{task.treeCount} trees</Badge>
-                          {task.carbonCredits && (
-                            <Badge variant="outline" className="bg-green-50 text-green-700">
-                              {task.carbonCredits} credits earned
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          Started: {task.createdDate}
-                          {task.completedDate && ` • Completed: ${task.completedDate}`}
-                        </p>
-                      </div>
-                      <div className="ml-4">
-                        {task.status === 'active' && (
-                          <div className="flex flex-col gap-2">
-                            {isSubmitted ? (
-                              <div>
-                                <div className="text-sm text-gray-600">Under Verification • Status: {statusLabel}</div>
-                                {statusLabel === 'Validated' ? (
-                                  <Badge variant="default" className="bg-green-100 text-green-700">Verified</Badge>
-                                ) : (
-                                  <>
-                                    <Badge variant="secondary" className="bg-green-100 text-green-700">Report submitted</Badge>
-                                    <Badge variant="outline" className="bg-orange-50 text-orange-700">Under Verification</Badge>
-                                  </>
-                                )}
-                              </div>
-                            ) : (
-                              <Button 
-                                onClick={() => openMrvFor(task.id)}
-                                className="bg-blue-600 hover:bg-blue-700"
-                              >
-                                <Camera className="w-4 h-4 mr-2" />
-                                Submit Report
-                              </Button>
-                            )}
-                          </div>
                         )}
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </TabsContent>
+                    ) : (
+                      <Button
+                        onClick={() => openMrvFor(task.id)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Submit Report
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {requestedByMe && !assignedToMe && !assignedToSomeoneElse && (
+                  <div>
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+                      Request Pending
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    })}
+  </div>
+</TabsContent>
 
         <TabsContent value="profile" className="space-y-6">
           <h2 className="text-2xl font-bold">NGO Profile</h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -604,23 +680,21 @@ export default function NGOPortal() {
             </Card>
           </div>
         </TabsContent>
-        
+
       </Tabs>
       <MRVReportModal
         open={mrvOpen}
         onOpenChange={(open) => setMrvOpen(open)}
         projectId={mrvProjectId}
-        ngoRegistrationId={currentUserId ?? 'NGO-2024-GE-001'}
-        onSuccess={(record) => {
-            // normalize key: prefer projectId (ObjectId) or externalProjectId
-            const key = record?.projectId ?? record?.externalProjectId;
-            if (key) {
-              setMrvByProject(prev => ({ ...prev, [key]: record }));
-              setMyTasks(prev => prev.map(t => t.id === key ? { ...t, status: 'completed', completedDate: new Date().toLocaleDateString() } : t));
-            }
+        ngoRegistrationId={currentUserId || 'NGO-2024-GE-001'}
+        onSuccess={(record: any) => {
+          const key = record?.projectId ?? record?.externalProjectId;
+          if (key) {
+            setMrvByProject(prev => ({ ...prev, [key]: record }));
+            setMyTasks(prev => prev.map(t => t.id === key ? { ...t, status: 'InProgress' } : t));
+          }
         }}
       />
     </div>
   );
 }
-

@@ -4,8 +4,6 @@ require("dotenv").config();
 const auth = require("./middlewares/auth").auth;
 const PORT = process.env.PORT || 4000;
 
-// Middleware
-const fileUpload = require("express-fileupload");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
@@ -26,11 +24,6 @@ const mrvRoutes = require("./router/Mrv");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(fileUpload({
-    useTempFiles: true,
-    tempFileDir: process.env.TEMP || './tmp',
-    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
-}));
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -39,14 +32,14 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-    origin: function(origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error("Not allowed by CORS"));
-        }
-    },
-    credentials: true
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true
 }));
 
 // Mount Routes
@@ -54,18 +47,21 @@ app.use("/api/v1/gov", govRoutes);
 app.use("/api/v1/ngo", ngoRoutes);
 app.use("/api/v1/company", compRoutes);
 app.use("/api/v1/mrv", mrvRoutes);
+
+// Auth test route
 app.get("/api/v1/auth/me", auth, (req, res) => {
   res.json({ user: req.user });
 });
+
 // Test Route
 app.get("/", (req, res) => {
-    return res.json({
-        success: true,
-        message: "Your server is running"
-    });
+  return res.json({
+    success: true,
+    message: "Your server is running"
+  });
 });
 
 // Start Server
 app.listen(PORT, () => {
-    console.log(`App is running at port ${PORT}`);
+  console.log(`App is running at port ${PORT}`);
 });
