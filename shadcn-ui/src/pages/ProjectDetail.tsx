@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useParams, useNavigate } from "react-router-dom";
-import cv from "@techstark/opencv-js";
 
 interface Project {
   _id: string;
@@ -13,8 +12,6 @@ interface Project {
   description: string;
   landImages?: string[];
   location?: { coordinates: [number, number] };
-  greeneryPercentage?: number;
-  idleLand?: number;
 }
 
 interface RegionAnalysis {
@@ -34,7 +31,6 @@ export default function ProjectDetail() {
   const { toast } = useToast();
   const [project, setProject] = useState<Project | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [cvReady, setCvReady] = useState(false);
   const [regionAnalyses, setRegionAnalyses] = useState<RegionAnalysis[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedGreenCover, setUploadedGreenCover] = useState<number | null>(null);
@@ -45,15 +41,7 @@ export default function ProjectDetail() {
   const drawingManagerRef = useRef<google.maps.drawing.DrawingManager>();
   const navigate = useNavigate();
 
-  // ✅ OpenCV Initialization
-  useEffect(() => {
-    if (cv && cv.onRuntimeInitialized) {
-      cv.onRuntimeInitialized = () => {
-        setCvReady(true);
-        console.log("OpenCV.js is ready!");
-      };
-    }
-  }, []);
+  // ✅ OpenCV is no longer used, so remove the cvReady state and the useEffect hook.
 
   // ✅ Fetch project details
   useEffect(() => {
@@ -71,9 +59,9 @@ export default function ProjectDetail() {
     fetchProject();
   }, [projectId]);
 
-  // ✅ Load Google Maps + Drawing Library
+  // ✅ Load Google Maps & Drawing Tools
   useEffect(() => {
-    if (project && project.location && !mapLoaded) {
+    if (project?.location && !mapLoaded) {
       const script = document.createElement("script");
       script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCpzV2uci8gLyp8si2idL0Gy1PLUe_J8bU&libraries=drawing`;
       script.async = true;
@@ -83,7 +71,7 @@ export default function ProjectDetail() {
     }
   }, [project, mapLoaded]);
 
-  // ✅ Initialize Map & Drawing Tool
+  // ✅ Initialize Map
   const initMap = () => {
     if (!project?.location) return;
     const [lng, lat] = project.location.coordinates;
@@ -98,10 +86,7 @@ export default function ProjectDetail() {
     drawingManagerRef.current = new google.maps.drawing.DrawingManager({
       drawingMode: google.maps.drawing.OverlayType.RECTANGLE,
       drawingControl: true,
-      drawingControlOptions: {
-        position: google.maps.ControlPosition.TOP_CENTER,
-        drawingModes: ["rectangle"],
-      },
+      drawingControlOptions: { position: google.maps.ControlPosition.TOP_CENTER, drawingModes: ["rectangle"] },
     });
 
     drawingManagerRef.current.setMap(mapRef.current);
@@ -112,24 +97,59 @@ export default function ProjectDetail() {
     });
   };
 
-  // ✅ Analyze Region on Map
-  const analyzeRegion = async (bounds: google.maps.LatLngBounds) => {
-    if (!cvReady) {
-      alert("OpenCV is still loading. Try again.");
-      return;
+  // ✅ New Canvas-based Analysis Function
+  const analyzeImgDataCanvas = (img: HTMLImageElement) => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) return { greenPercent: 0, idlePercent: 0, treeCount: 0 };
+
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let greenPixelCount = 0;
+
+    // Calculate the mean green value
+    let totalGreen = 0;
+    for (let i = 1; i < imageData.data.length; i += 4) {
+      totalGreen += imageData.data[i];
+    }
+    const meanGreen = totalGreen / (imageData.data.length / 4);
+
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      const greenValue = imageData.data[i + 1];
+
+      // A simple threshold to detect "green" based on the mean green value
+      if (greenValue > meanGreen * 1.5) { // Adjusted logic for better results
+        greenPixelCount++;
+      }
     }
 
+    const totalPixels = canvas.width * canvas.height;
+    const greenPercent = Number(((greenPixelCount / totalPixels) * 100).toFixed(2));
+    const idlePercent = Number((100 - greenPercent).toFixed(2));
+
+    // This method does not count trees, so we return a placeholder.
+    const treeCount = 0; 
+
+    return { greenPercent, idlePercent, treeCount };
+  };
+
+  // ✅ Analyze Region from Google Maps (Updated to use the new function)
+  const analyzeRegion = async (bounds: google.maps.LatLngBounds) => {
     const centerLat = bounds.getCenter().lat();
     const centerLng = bounds.getCenter().lng();
     const proxyUrl = "https://gmap-sih-img-proxy.vipulchaturvedi.workers.dev/";
-    const imgUrl = `${proxyUrl}?center=${centerLat},${centerLng}&zoom=15&size=640x640&key=YOUR_API_KEY`;
+    const imgUrl = `${proxyUrl}?center=${centerLat},${centerLng}&zoom=15&size=640x640&key=AIzaSyCpzV2uci8gLyp8si2idL0Gy1PLUe_J8bU`;
 
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.src = imgUrl;
 
     img.onload = async () => {
-      const { greenPercent, idlePercent, treeCount } = analyzeImgData(img);
+      const { greenPercent, idlePercent, treeCount } = analyzeImgDataCanvas(img);
 
       let insights = { climateBenefits: "", risks: "", suggestions: "" };
       try {
@@ -144,81 +164,22 @@ export default function ProjectDetail() {
         console.error(err);
       }
 
-      setRegionAnalyses((prev) => [
-        ...prev,
-        { id: prev.length + 1, greenPercent, idlePercent, treeCount, insights },
-      ]);
+      setRegionAnalyses((prev) => [...prev, { id: prev.length + 1, greenPercent, idlePercent, treeCount, insights }]);
     };
   };
 
-  // ✅ ExG + Otsu + Contours Detection
-  const analyzeImgData = (img: HTMLImageElement) => {
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return { greenPercent: 0, idlePercent: 0, treeCount: 0 };
-
-    ctx.drawImage(img, 0, 0);
-
-    // ✅ Fix: Use cv.imread() with a temporary canvas element
-    // This is the correct method for browser environments
-    document.body.appendChild(canvas);
-    const src = cv.imread(canvas);
-
-    let bgr = new cv.Mat();
-    cv.cvtColor(src, bgr, cv.COLOR_RGBA2BGR);
-
-    let channels = new cv.MatVector();
-    cv.split(bgr, channels);
-    let R = channels.get(2), G = channels.get(1), B = channels.get(0);
-
-    // ✅ Excess Green Index: 2G - R - B
-    let exg = new cv.Mat();
-    cv.addWeighted(G, 2, R, -1, 0, exg);
-    cv.addWeighted(exg, 1, B, -1, 0, exg);
-
-    // Normalize & Otsu Thresholding
-    cv.normalize(exg, exg, 0, 255, cv.NORM_MINMAX);
-    exg.convertTo(exg, cv.CV_8U);
-    let binary = new cv.Mat();
-    cv.threshold(exg, binary, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-
-    // ✅ Contour detection for tree count
-    let contours = new cv.MatVector();
-    let hierarchy = new cv.Mat();
-    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-    const totalPixels = img.width * img.height;
-    const greenPixels = cv.countNonZero(binary);
-    const greenPercent = Number(((greenPixels / totalPixels) * 100).toFixed(2));
-    const treeCount = contours.size();
-
-    // Cleanup
-    src.delete();
-    bgr.delete();
-    R.delete();
-    G.delete();
-    B.delete();
-    exg.delete();
-    binary.delete();
-    contours.delete();
-    hierarchy.delete();
-    document.body.removeChild(canvas);
-
-    return { greenPercent, idlePercent: Number((100 - greenPercent).toFixed(2)), treeCount };
-  };
-
-  // ✅ Analyze Uploaded Image
+  // ✅ Analyze Uploaded Image (Updated to use the new function)
   const analyzeImage = () => {
-    if (!uploadedFile) return toast({ title: "No image", description: "Select an image first." });
-
+    if (!uploadedFile) {
+      return toast({ title: "No image", description: "Select an image first." });
+    }
+    
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onload = () => {
       const img = new Image();
       img.src = reader.result as string;
       img.onload = () => {
-        const { greenPercent, idlePercent, treeCount } = analyzeImgData(img);
+        const { greenPercent, idlePercent, treeCount } = analyzeImgDataCanvas(img);
         setUploadedGreenCover(greenPercent);
         setUploadedIdleLand(idlePercent);
         setUploadedTreeCount(treeCount);
@@ -226,8 +187,8 @@ export default function ProjectDetail() {
     };
     reader.readAsDataURL(uploadedFile);
   };
-
-  // ✅ Save Analysis
+ 
+  // ✅ Save Uploaded Analysis
   const saveAnalysis = async () => {
     if (!project || uploadedGreenCover === null || uploadedIdleLand === null) return;
     try {

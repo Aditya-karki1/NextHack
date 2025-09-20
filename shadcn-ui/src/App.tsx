@@ -18,6 +18,7 @@ import ProjectDetail from "./pages/ProjectDetail";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./context/ProtectedRoute";
 import NgoDetail from "./pages/NgoDetail";
+import ProjectReports from "./pages/ProjectReports";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,8 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/government/projects/:projectId/reports" element={<ProjectReports />} />
+            
             <Route
               path="/corporate"
               element={

@@ -5,6 +5,15 @@ module.exports = {
   ],
   theme: {
     extend: {
+        keyframes: {
+    'earth-spin': {
+      '0%': { transform: 'rotate(0deg)' },
+      '100%': { transform: 'rotate(360deg)' },
+    },
+  },
+  animation: {
+    'earth-spin': 'earth-spin 120s linear infinite',
+  },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',

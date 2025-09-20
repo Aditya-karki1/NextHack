@@ -2,6 +2,7 @@ const RestorationProject = require('../models/RestorationProject');
 const { uploadToCloudinary } = require('../middlewares/upload');
 const Ngo = require('../models/Ngo');
 const mongoose = require('mongoose');
+const MRVRecord = require("../models/MRVRecord");
 const ngo = require('../models/Ngo');
 // Create Project
 exports.createProject = async (req, res) => {
@@ -91,12 +92,12 @@ console.log("Assigned project:", project);
   }
 };
 
-// Controller to handle an NGO requesting a project
 exports.requestProject = async (req, res) => {
     try {
         const { id } = req.params;
         const { requestedBy } = req.body;
 
+        // Validate IDs
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ success: false, message: "Invalid project ID." });
         }
@@ -104,22 +105,36 @@ exports.requestProject = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid user ID." });
         }
 
+        // Find NGO and check subscription status
+        const ngo = await Ngo.findById(requestedBy);
+        if (!ngo) {
+            return res.status(404).json({ success: false, message: "NGO not found." });
+        }
+
+        // Check if subscription is active
+        const currentDate = new Date();
+        if (!ngo.subscription || !ngo.subscription.endDate || currentDate > ngo.subscription.endDate) {
+            return res.status(403).json({ 
+                success: false, 
+                message: "Your subscription is inactive or expired. Please renew to request projects." 
+            });
+        }
+
+        // Find project
         const project = await RestorationProject.findById(id);
         if (!project) {
             return res.status(404).json({ success: false, message: "Project not found." });
         }
 
-        // Check if the NGO has already requested
+        // Check if NGO has already requested this project
         if (project.requestedBy.includes(requestedBy)) {
             return res.status(409).json({ success: false, message: "You have already requested this project." });
         }
 
-        // Push NGO ID into requestedBy array
+        // Add NGO to requestedBy array
         project.requestedBy.push(requestedBy);
 
-        // Optionally: Only mark as 'Assigned' when one NGO is approved
-        // project.status = 'Assigned'; 
-
+        // Save changes
         await project.save();
 
         res.status(200).json({
@@ -132,4 +147,40 @@ exports.requestProject = async (req, res) => {
         console.error(err);
         res.status(500).json({ success: false, message: "Server error." });
     }
+};
+exports.getProjectReports = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    // Fetch the project
+    const project = await RestorationProject.findById(projectId).lean();
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+
+    // Fetch MRV reports associated with this project
+    const reports = await MRVRecord.find({ projectId }).sort({ dateReported: -1 }).lean();
+
+    res.json({
+      success: true,
+      project: {
+        id: project._id,
+        title: project.title,
+        governmentId: project.governmentId,
+        ngoId: project.ngoId,
+        location: project.location,
+        areaHectares: project.areaHectares,
+        targetTrees: project.targetTrees,
+        startDate: project.startDate,
+        endDate: project.endDate,
+        status: project.status,
+        greeneryPercentage: project.greeneryPercentage,
+        co2Level: project.co2Level,
+        landImages: project.landImages,
+        requestedBy: project.requestedBy,
+      },
+      reports
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };

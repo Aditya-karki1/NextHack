@@ -4,7 +4,7 @@ const Ngo = require('../models/Ngo');
 const {auth,isNgo} = require("../middlewares/auth");
 const {signupNgo,loginNgo} = require("../controllers/Auth");
 const { verifyNgo } = require("../controllers/Verification");
-
+const razorpay = require("../config/razorpay");
 router.post("/verifyNgo", auth, isNgo, verifyNgo);
 
 router.post("/login", loginNgo);
@@ -21,6 +21,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+
 // Update KYC status
 router.post('/:id/verify', async (req, res) => {
   try {
@@ -34,7 +35,18 @@ router.post('/:id/verify', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
+router.get("/credits-test/:id", async (req, res) => {
+  try {
+    console.log("Fetching credits for NGO ID:", req.params.id);
+    const ngo = await Ngo.findById(req.params.id, "credits.balance");
+    if (!ngo) return res.status(404).json({ success: false, message: "NGO not found" });
+console.log("NGO found:", ngo);
+    res.json({ success: true, balance: ngo.credits.balance });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 // Route for sending OTP to the user's email
 // router.post("/sendotp", sendOTP);

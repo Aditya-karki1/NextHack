@@ -16,6 +16,7 @@ exports.auth = (req, res, next) => {
 
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
+           
             req.user = decoded; // Attach user info to request
         } catch (error) {
             console.log("JWT Error:", error.message);

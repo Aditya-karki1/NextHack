@@ -8,17 +8,13 @@ import { useAuth } from "../context/AuthContext";
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-console.log ("check",user)
-  // Function to handle portal click
+
   const handlePortalAccess = (role: "GOV" | "NGO" | "COMPANY") => {
     if (user && user.role === role) {
-      console.log("User role matches:", user.role);
-      // If logged in with the correct role → Go to portal directly
       if (role === "GOV") navigate("/government");
       if (role === "NGO") navigate("/ngo");
       if (role === "COMPANY") navigate("/corporate");
     } else {
-      //  Not logged in → Go to respective login page
       if (role === "GOV") navigate("/login-gov");
       if (role === "NGO") navigate("/login-ngo");
       if (role === "COMPANY") navigate("/login-corporate");
@@ -26,11 +22,24 @@ console.log ("check",user)
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50">
-      {/* Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
+    <div className="relative min-h-screen overflow-hidden">
+      {/* Fullscreen Moving Earth */}
+      <div className="absolute inset-0 w-full h-full">
+        <img
+          src="/images/1.gif" // GIF in public/images
+          alt="Earth"
+          className="w-full h-full object-cover "
+        />
+      </div>
+
+      {/* Overlay for readability */}
+      <div className="absolute inset-0 bg-black/30"></div>
+
+      {/* Main Content */}
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="sticky top-0 z-50 bg-transparent border-b border-white/30 backdrop-blur-sm">
+          <div className="container mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-gradient-to-r from-green-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
                 <Leaf className="w-7 h-7 text-white" />
@@ -39,110 +48,82 @@ console.log ("check",user)
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
                   EcoChain
                 </h1>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-white/80">
                   Decentralized Carbon Credits Platform
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Badge variant="secondary" className="bg-green-100 text-green-700">
+              <Badge variant="secondary" className="bg-green-100/30 text-green-200">
                 <Globe className="w-3 h-3 mr-1" />
                 Live on Blockchain
               </Badge>
-              <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+              <Badge variant="secondary" className="bg-blue-100/30 text-blue-200">
                 <Zap className="w-3 h-3 mr-1" />
                 AI Powered
               </Badge>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Hero Section */}
-      <div className="container mx-auto px-6 py-12">
-        <div className="text-center mb-16">
-          <h2 className="text-5xl font-bold text-gray-900 mb-6">
+        {/* Hero Section */}
+        <div className="container mx-auto px-6 py-12 text-center">
+          <h2 className="text-5xl font-bold text-white mb-6">
             Transparent Carbon Credits
-            <span className="block text-4xl bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
+            <span className="block text-4xl bg-gradient-to-r from-green-400 to-blue-400 bg-clip-text text-transparent">
               Powered by AI & Blockchain
             </span>
           </h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
+          <p className="text-xl text-white/80 max-w-3xl mx-auto mb-12">
             Connecting governments, NGOs, and corporations to accelerate global
             reforestation efforts through verifiable, transparent, and automated
             carbon credit management.
           </p>
-        </div>
 
-        {/* Portal Selection */}
-        <div className="mb-16">
-          <h3 className="text-3xl font-bold text-center text-gray-900 mb-12">
-            Choose Your Portal
-          </h3>
-
+          {/* Portal Selection */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* Government Portal */}
-            <Card className="group cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl bg-white/80 backdrop-blur-sm border-2 hover:border-green-300">
-              <CardHeader className="text-center pb-4">
-                <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Shield className="w-8 h-8 text-white" />
-                </div>
-                <CardTitle className="text-2xl text-gray-900">Government Portal</CardTitle>
-                <CardDescription className="text-gray-600">
-                  Oversee and verify afforestation tasks
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white"
-                  onClick={() => handlePortalAccess("GOV")}
-                >
-                  Access Portal
-                </Button>
-              </CardContent>
-            </Card>
+            {["GOV", "NGO", "COMPANY"].map((role) => {
+              const icons = { GOV: Shield, NGO: Leaf, COMPANY: Building2 };
+              const colors = {
+                GOV: "from-green-500 to-green-600",
+                NGO: "from-blue-500 to-blue-600",
+                COMPANY: "from-purple-500 to-purple-600",
+              };
+              const titles = {
+                GOV: "Government Portal",
+                NGO: "NGO Portal",
+                COMPANY: "Corporate Portal",
+              };
+              const descs = {
+                GOV: "Oversee and verify afforestation tasks",
+                NGO: "Execute tasks & earn verified carbon credits",
+                COMPANY: "Purchase credits & go carbon neutral",
+              };
+              const Icon = icons[role as keyof typeof icons];
 
-            {/* NGO Portal */}
-            <Card className="group cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl bg-white/80 backdrop-blur-sm border-2 hover:border-blue-300">
-              <CardHeader className="text-center pb-4">
-                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Leaf className="w-8 h-8 text-white" />
-                </div>
-                <CardTitle className="text-2xl text-gray-900">NGO Portal</CardTitle>
-                <CardDescription className="text-gray-600">
-                  Execute tasks & earn verified carbon credits
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white"
-                  onClick={() => handlePortalAccess("NGO")}
+              return (
+                <Card
+                  key={role}
+                  className={`group cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl bg-white/20 border border-white/30 backdrop-blur-md`}
                 >
-                  Access Portal
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Corporate Portal */}
-            <Card className="group cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl bg-white/80 backdrop-blur-sm border-2 hover:border-purple-300">
-              <CardHeader className="text-center pb-4">
-                <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                  <Building2 className="w-8 h-8 text-white" />
-                </div>
-                <CardTitle className="text-2xl text-gray-900">Corporate Portal</CardTitle>
-                <CardDescription className="text-gray-600">
-                  Purchase credits & go carbon neutral
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  className="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white"
-                  onClick={() => handlePortalAccess("COMPANY")}
-                >
-                  Access Portal
-                </Button>
-              </CardContent>
-            </Card>
+                  <CardHeader className="text-center pb-4">
+                    <div className={`w-16 h-16 bg-gradient-to-r ${colors[role as keyof typeof colors]} rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                      <Icon className="w-8 h-8 text-white" />
+                    </div>
+                    <CardTitle className="text-2xl text-white">{titles[role as keyof typeof titles]}</CardTitle>
+                    <CardDescription className="text-white/70">{descs[role as keyof typeof descs]}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      className={`w-full bg-gradient-to-r ${colors[role as keyof typeof colors]} text-white`}
+                      onClick={() => handlePortalAccess(role as "GOV" | "NGO" | "COMPANY")}
+                    >
+                      Access Portal
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </div>

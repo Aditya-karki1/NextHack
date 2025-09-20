@@ -53,7 +53,7 @@ export default function NGOPortal() {
   const [myTasks, setMyTasks] = useState<Task[]>([]);
   const [ngoDisplayName, setNgoDisplayName] = useState<string>('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [myCredits] = useState<CarbonCredit[]>(mockCarbonCredits.filter(c => c.ngoName === 'Green Earth NGO'));
+ 
 
   // Verification dialog & form state
   const [verifyOpen, setVerifyOpen] = useState(false);
@@ -80,6 +80,30 @@ export default function NGOPortal() {
     setMrvProjectId(projectId);
     setMrvOpen(true);
   };
+    const [myCredits, setMyCredits] = useState<any[]>([]);
+  const [availableCredits, setAvailableCredits] = useState<number>(0);
+const fetchCredits = async (ngoId: string) => {
+  try {
+    const res = await axios.get(`http://localhost:4000/api/v1/ngo/credits-test/${ngoId}`, { withCredentials: true });
+    console.log("Fetched credits:", res.data);
+
+    if (res.data?.success) {
+      setAvailableCredits(res.data.balance || 0);
+      setMyCredits([
+        {
+          id: "wallet-001",
+          location: "NGO Credits",
+          amount: res.data.balance || 0,
+          price: 10, // optional
+          status: "available",
+          date: new Date().toISOString(),
+        },
+      ]);
+    }
+  } catch (err) {
+    console.error("Error fetching credits:", err);
+  }
+};
 
 const fetchProjects = async (userId: string | null) => {
   try {
@@ -123,6 +147,7 @@ const fetchProjects = async (userId: string | null) => {
       try {
         const res = await axios.get('http://localhost:4000/api/v1/auth/me', { withCredentials: true });
         if (res.status === 200 && res.data?.user) {
+          console.log("Authenticated user:", res.data.user);
           const userId = res.data.user._id || res.data.user.id || null;
           setCurrentUserId(userId);
           const name = res.data.user.name || res.data.user.orgName || res.data.user.registrationId || res.data.user.ngoName;
@@ -152,12 +177,26 @@ const fetchProjects = async (userId: string | null) => {
   }, []);
 
   // Use a separate effect to fetch projects after the user ID is set
-  useEffect(() => {
-    if (currentUserId) {
-      console.log("Fetching projects for user:", currentUserId);
-      fetchProjects(currentUserId);
-    }
-  }, [currentUserId]);
+useEffect(() => {
+  if (currentUserId) {
+    console.log("Fetching projects for user:", currentUserId);
+    fetchCredits(currentUserId); // pass the NGO ID here
+    fetchProjects(currentUserId);
+  }
+}, [currentUserId]);
+const [subscription, setSubscription] = useState<{isActive: boolean; plan?: string; endDate?: string}>({
+  isActive: false,
+});
+
+useEffect(() => {
+  if (currentUserId) {
+    axios
+      .get(`http://localhost:4000/api/v1/ngo/${currentUserId}/subscription`, { withCredentials: true })
+      .then((res) => setSubscription(res.data))
+      .catch(() => setSubscription({ isActive: false }));
+  }
+}, [currentUserId]);
+
 
   const handleVerifyNgo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,6 +259,47 @@ const fetchProjects = async (userId: string | null) => {
       toast({ title: 'Verification failed', description: err.response?.data?.message || 'Verification failed' });
     }
   };
+  
+
+
+// const handleSubscriptionPayment = async (plan: string) => {
+//   try {
+//     const { data } = await axios.post(
+//       `http://localhost:4000/api/v1/ngo/${currentUserId}/subscribe`,
+//       { plan }
+//     );
+// console.log("Payment initiation data:", data);
+//     const options = {
+//       key: data.key,
+//       amount: data.amount,
+//       currency: "INR",
+//       name: "NGO Subscription",
+//       description: `${plan} Subscription`,
+//       order_id: data.orderId, // must be from backend
+//       handler: async (response: any) => {
+//         await axios.put(
+//           `http://localhost:4000/api/v1/ngo/${currentUserId}/activate-subscription`,
+//           { plan }
+//         );
+//         setSubscription({ isActive: true, plan });
+//         toast({ title: "Success", description: "Subscription Activated!" });
+//       },
+//       prefill: {
+//         name: "NGO Admin",
+//         email: "test@ngo.org",
+//         contact: "9999999999",
+//       },
+//       theme: { color: "#3399cc" },
+//     };
+
+//     const rzp = new (window as any).Razorpay(options);
+//     rzp.open();
+//   } catch (err) {
+//     console.error(err);
+//     toast({ title: "Error", description: "Failed to start payment." });
+//   }
+// };
+
 
   const handleRequestTask = async (taskId: string) => {
     if (!currentUserId) {
@@ -243,8 +323,51 @@ const fetchProjects = async (userId: string | null) => {
     }
   };
   
-  const totalCreditsEarned = myCredits.reduce((sum, credit) => sum + credit.amount, 0);
-  const availableCredits = myCredits.filter(c => c.status === 'available').reduce((sum, c) => sum + c.amount, 0);
+
+
+
+
+
+
+
+
+
+
+
+
+
+//   const handleRequestTask = async (taskId: string) => {
+//   if (!currentUserId) {
+//     toast({ title: "Error", description: "You must be logged in to request a task." });
+//     return;
+//   }
+
+//   if (!subscription.isActive) {
+//     toast({ title: "Subscription Required", description: "Please activate a subscription to request tasks." });
+//     return;
+//   }
+
+//   try {
+//     const response = await axios.put(
+//       `http://localhost:4000/api/v1/gov/projects/${taskId}/request`,
+//       { requestedBy: currentUserId },
+//       { withCredentials: true }
+//     );
+
+//     if (response.status === 200) {
+//       toast({ title: "Request Submitted", description: "Request for task has been submitted." });
+//       fetchProjects(currentUserId);
+//     }
+//   } catch (err: any) {
+//     console.error(err);
+//     toast({ title: "Request Failed", description: err.response?.data?.message || "Could not request task." });
+//   }
+// };
+
+const totalCreditsEarned = myCredits.reduce((sum, credit) => sum + credit.amount, 0);
+const availableCreditsAmount = myCredits
+  .filter(c => c.status === 'available')
+  .reduce((sum, c) => sum + c.amount, 0);
   const completedProjects = myTasks.filter(t => t.status === 'Completed').length;
 
   return (
@@ -307,6 +430,7 @@ const fetchProjects = async (userId: string | null) => {
           <TabsTrigger value="wallet">Digital Wallet</TabsTrigger>
           <TabsTrigger value="profile">NGO Profile</TabsTrigger>
         </TabsList>
+
 
         <TabsContent value="marketplace" className="space-y-6">
           <div className="flex flex-col items-center md:flex-row md:justify-between md:items-center">
@@ -379,6 +503,7 @@ const fetchProjects = async (userId: string | null) => {
               </Dialog>
             </div>
           </div>
+       
 
          <div className="grid gap-4">
   {availableTasks.map((task) => {
@@ -437,89 +562,58 @@ const fetchProjects = async (userId: string | null) => {
 
         </TabsContent>
 
-        <TabsContent value="wallet" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Digital Wallet</h2>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Total Balance</p>
-              <p className="text-2xl font-bold text-green-600">{availableCredits} Credits</p>
-            </div>
-          </div>
+       <TabsContent value="wallet" className="space-y-6">
+  <div className="flex justify-between items-center">
+    <h2 className="text-2xl font-bold">Digital Wallet</h2>
+    <div className="text-right">
+      <p className="text-sm text-gray-600">Total Balance</p>
+      <p className="text-2xl font-bold text-green-600">{availableCredits} Credits</p>
+    </div>
+  </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Carbon Credit Portfolio</CardTitle>
-              <CardDescription>Manage your earned carbon credits</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Credit ID</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Amount (tCO₂)</TableHead>
-                    <TableHead>Market Price</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {myCredits.map((credit) => (
-                    <TableRow key={credit.id}>
-                      <TableCell className="font-mono text-sm">{credit.id}</TableCell>
-                      <TableCell>{credit.location}</TableCell>
-                      <TableCell>{credit.amount}</TableCell>
-                      <TableCell>${credit.price}/tonne</TableCell>
-                      <TableCell>
-                        <Badge variant={credit.status === 'available' ? 'default' : 'secondary'}>
-                          {credit.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {credit.status === 'available' && (
-                          <Button size="sm" variant="outline">
-                            List for Sale
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Transaction History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                  <div>
-                    <p className="font-medium">Credits Minted</p>
-                    <p className="text-sm text-gray-600">Odisha Coastline Project</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-green-600">+375 Credits</p>
-                    <p className="text-sm text-gray-600">Jan 8, 2024</p>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                  <div>
-                    <p className="font-medium">Credits Sold</p>
-                    <p className="text-sm text-gray-600">To TechCorp Solutions</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-blue-600">-100 Credits</p>
-                    <p className="text-sm text-gray-600">Jan 10, 2024</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+  <Card>
+    <CardHeader>
+      <CardTitle>Carbon Credit Portfolio</CardTitle>
+      <CardDescription>Manage your earned carbon credits</CardDescription>
+    </CardHeader>
+    <CardContent>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Credit ID</TableHead>
+            <TableHead>Project</TableHead>
+            <TableHead>Amount (tCO₂)</TableHead>
+            <TableHead>Market Price</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {myCredits.map((credit) => (
+            <TableRow key={credit.id}>
+              <TableCell className="font-mono text-sm">{credit.id}</TableCell>
+              <TableCell>{credit.location}</TableCell>
+              <TableCell>{credit.amount}</TableCell>
+              <TableCell>${credit.price}/tonne</TableCell>
+              <TableCell>
+                <Badge variant={credit.status === 'available' ? 'default' : 'secondary'}>
+                  {credit.status}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                {credit.status === 'available' && (
+                  <Button size="sm" variant="outline">
+                    List for Sale
+                  </Button>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </CardContent>
+  </Card>
+</TabsContent>
 
   <TabsContent value="mytasks" className="space-y-6">
   <h2 className="text-2xl font-bold">My Tasks</h2>
