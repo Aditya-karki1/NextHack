@@ -8,7 +8,7 @@ const mrvSchema = new mongoose.Schema({
   dateReported: Date,
   treeCount: Number,
   droneImages: [String], // stored in S3 / IPFS
-  status: { type: String, enum: ['Pending','Validated','Rejected'] },
+  status: { type: String, enum: ['Pending','Verified','Rejected'] },
   blockchainTx: String,
   createdAt: { type: Date, default: Date.now }
 });

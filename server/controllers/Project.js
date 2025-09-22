@@ -105,19 +105,10 @@ exports.requestProject = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid user ID." });
         }
 
-        // Find NGO and check subscription status
+        // Find NGO
         const ngo = await Ngo.findById(requestedBy);
         if (!ngo) {
             return res.status(404).json({ success: false, message: "NGO not found." });
-        }
-
-        // Check if subscription is active
-        const currentDate = new Date();
-        if (!ngo.subscription || !ngo.subscription.endDate || currentDate > ngo.subscription.endDate) {
-            return res.status(403).json({ 
-                success: false, 
-                message: "Your subscription is inactive or expired. Please renew to request projects." 
-            });
         }
 
         // Find project
@@ -148,6 +139,7 @@ exports.requestProject = async (req, res) => {
         res.status(500).json({ success: false, message: "Server error." });
     }
 };
+
 exports.getProjectReports = async (req, res) => {
   try {
     const { projectId } = req.params;

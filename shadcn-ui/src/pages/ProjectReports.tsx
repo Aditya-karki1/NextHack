@@ -12,7 +12,6 @@ export default function ProjectReports() {
   const [project, setProject] = useState<any>({});
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [reportUpdating, setReportUpdating] = useState<string | null>(null);
-  const [creditsInput, setCreditsInput] = useState<{ [key: string]: number }>({}); // per report
 
   const fetchReports = async () => {
     try {
@@ -20,7 +19,6 @@ export default function ProjectReports() {
         `http://localhost:4000/api/v1/gov/projects/${projectId}/reports`,
         { withCredentials: true }
       );
-
       if (res.data?.success) {
         const sortedReports = (res.data.reports || []).sort(
           (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -47,7 +45,6 @@ export default function ProjectReports() {
         { status: newStatus },
         { withCredentials: true }
       );
-
       if (res.data?.success) {
         setProject({ ...project, status: newStatus });
       }
@@ -58,17 +55,13 @@ export default function ProjectReports() {
     }
   };
 
-  // Change individual report status (with credits)
+  // Change individual report status
   const handleReportStatusChange = async (reportId: string, newStatus: string) => {
     setReportUpdating(reportId);
-
     try {
       const res = await axios.patch(
         `http://localhost:4000/api/v1/gov/reports/${reportId}/status`,
-        {
-          status: newStatus,
-          amount: newStatus === "Verified" ? creditsInput[reportId] || 0 : undefined,
-        },
+        { status: newStatus }, // backend calculates credits automatically
         { withCredentials: true }
       );
 
@@ -76,11 +69,10 @@ export default function ProjectReports() {
         setReports((prev) =>
           prev.map((r) =>
             r._id === reportId
-              ? { ...r, status: newStatus, amount: newStatus === "Verified" ? creditsInput[reportId] : r.amount }
+              ? { ...r, status: newStatus, credits: res.data.record.credits }
               : r
           )
         );
-        setCreditsInput((prev) => ({ ...prev, [reportId]: 0 })); // reset input
       }
     } catch (err) {
       console.error("Error updating report status:", err);
@@ -141,44 +133,25 @@ export default function ProjectReports() {
                     <p><strong>Notes:</strong> {report.notes || "-"}</p>
 
                     {/* Credits display */}
-                    {report.amount !== undefined && report.amount > 0 && (
+                    {report.credits !== undefined && report.credits > 0 && (
                       <p className="mt-2 flex items-center text-yellow-700 font-semibold">
                         <span className="mr-2">🪙</span>
-                        Earned Credits: {report.amount}
+                        Earned Credits: {report.credits}
                       </p>
                     )}
 
-                    {/* Status buttons with coin input */}
+                    {/* Status buttons */}
                     <div className="mt-2 flex gap-2 items-center">
                       {["Pending", "Verified"].map((s) => (
-                        <div key={s} className="flex gap-2 items-center">
-                          {s === "Verified" && report.status !== "Verified" && (
-                            <div className="flex items-center border border-yellow-400 rounded-full px-3 py-1 bg-yellow-50">
-                              <span className="text-yellow-500 mr-2">🪙</span>
-                              <input
-                                type="number"
-                                min={0}
-                                placeholder="Credits"
-                                value={creditsInput[report._id] || ""}
-                                onChange={(e) =>
-                                  setCreditsInput((prev) => ({
-                                    ...prev,
-                                    [report._id]: Number(e.target.value),
-                                  }))
-                                }
-                                className="bg-transparent w-20 text-yellow-800 font-semibold focus:outline-none"
-                              />
-                            </div>
-                          )}
-                          <Button
-                            size="sm"
-                            onClick={() => handleReportStatusChange(report._id, s)}
-                            disabled={reportUpdating === report._id || report.status === s}
-                            className={s === "Verified" ? "bg-yellow-500 hover:bg-yellow-600 text-white" : ""}
-                          >
-                            {s}
-                          </Button>
-                        </div>
+                        <Button
+                          key={s}
+                          size="sm"
+                          onClick={() => handleReportStatusChange(report._id, s)}
+                          disabled={reportUpdating === report._id || report.status === s}
+                          className={s === "Verified" ? "bg-yellow-500 hover:bg-yellow-600 text-white" : ""}
+                        >
+                          {s}
+                        </Button>
                       ))}
                     </div>
                   </div>

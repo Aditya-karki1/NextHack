@@ -4,6 +4,10 @@ const Comp = require("../models/Comp");
 // const OTP = require("../models/OTP");
 // const otpGenerator = require("otp-generator");
 const bcrypt = require("bcryptjs");
+
+const { ethers } = require("ethers");
+
+
 // const Profile = require("../models/Profile");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
@@ -111,49 +115,66 @@ exports.signupGov = async (req,res) => {
     }
 };
 
-exports.signupNgo = async (req,res) => {
-    try{
-        const {name,email,password} = req.body;
-        console.log(name,email,password);
-        if(!name || !email || !password){
-            return res.status(403).json({
-                success:false,
-                message:"All fields are required"
-            })
-        }
+exports.signupNgo = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    console.log("Signup request:", name, email, password);
 
-        const existingUser = await Ngo.findOne({email});
-
-        if(existingUser){
-            return res.status(401).json({
-                success:false,
-                message:"user already exists"
-            })
-        }
-
-        const hashedPassword =  await bcrypt.hash(password,10);
-
-        const user = await Ngo.create({ 
-            name,
-            email,
-            password:hashedPassword
-        })
-
-
-        return res.status(200).json({
-            success:true,
-            message:" Ngo Account created successfully",
-            user,
-        })
-
-
-    }catch(error){
-        console.log(error);
-        return res.status(500).json({
-            success:false,
-            message:"Ngo user cannot be registered . Please try again later"
-        })
+    // Validate input
+    if (!name || !email || !password) {
+      return res.status(403).json({
+        success: false,
+        message: "All fields are required",
+      });
     }
+
+    // Check if user already exists
+    const existingUser = await Ngo.findOne({ email });
+    if (existingUser) {
+      return res.status(401).json({
+        success: false,
+        message: "User already exists",
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Auto-generate blockchain wallet for NGO
+    const wallet = ethers.Wallet.createRandom();
+
+    // Create new NGO user with wallet address
+    const user = await Ngo.create({
+      name,
+      email,
+      password: hashedPassword,
+      credits: {
+        balance: 0,
+        walletAddress: wallet.address,
+        lastUpdated: new Date(),
+      },
+    });
+
+    console.log("NGO wallet created:", wallet.address);
+
+    return res.status(200).json({
+      success: true,
+      message: "NGO account created successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        walletAddress: wallet.address,
+      },
+    });
+
+  } catch (error) {
+    console.error("Signup error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "NGO user cannot be registered. Please try again later",
+    });
+  }
 };
 
 exports.signupComp = async (req,res) => {

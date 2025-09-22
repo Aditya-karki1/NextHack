@@ -11,7 +11,7 @@ const MRVRecord = require("../models/MRVRecord");
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 const Ngo=require('../models/Ngo');
-
+const blockchainService = require('../services/blockchainService');
 router.post("/login", loginGov);
 
 // Route for user signup
@@ -30,57 +30,99 @@ router.post(
   },
   createProject
 );
-router.patch('/reports/:reportId/status', async (req, res) => {
+
+ // your contract interaction service
+router.patch("/reports/:reportId/status", async (req, res) => {
   try {
     const { reportId } = req.params;
-    const { status, amount } = req.body; // <-- include amount
+    const { status } = req.body;
+    const tokensPerTree = 10; // Fixed token rate per tree
 
+    console.log("Updating report status:", reportId, status);
+
+    // ✅ 1. Find MRV Report
     if (!mongoose.Types.ObjectId.isValid(reportId)) {
-      return res.status(400).json({ success: false, message: 'Invalid report ID' });
+      return res.status(400).json({ success: false, message: "Invalid report ID" });
     }
 
-    // Build the update object dynamically
-    const updateData = {};
-    if (status) updateData.status = status;
-    if (amount !== undefined) updateData.amount = amount; // optional update
-
-    // Update MRV report
-    const report = await MRVRecord.findByIdAndUpdate(
-      reportId,
-      updateData,
-      { new: true }
-    );
-
+    const report = await MRVRecord.findById(reportId);
     if (!report) {
-      return res.status(404).json({ success: false, message: 'Report not found' });
+      return res.status(404).json({ success: false, message: "Report not found" });
     }
 
-    // If report is verified, update the parent project's status
-    if (status === 'Verified' && report.projectId) {
-      const project = await RestorationProject.findById(report.projectId);
-      if (project && project.status !== 'Verified') {
-        project.status = 'Verified';
-        await project.save();
+    // ✅ 2. Update status
+    report.status = status;
+    await report.save();
+    console.log("Report status updated in DB:", status);
+
+    // ✅ 3. If Verified, handle project + blockchain + credits
+    if (status === "Verified") {
+      console.log("Report verified. Updating project & NGO credits...");
+
+      // Update project status if exists
+      if (report.projectId) {
+        const project = await RestorationProject.findById(report.projectId);
+        if (project && project.status !== "Verified") {
+          project.status = "Verified";
+          await project.save();
+          console.log("Project marked as Verified:", project._id);
+        }
       }
-    }
 
-    // Update NGO credits if amount is provided
-    if (amount !== undefined && report.userId) {
-      const ngo = await Ngo.findById(report.userId);
-      if (ngo) {
-        ngo.credits.balance += amount;
-        ngo.credits.lastUpdated = new Date();
-        await ngo.save();
+      // ✅ Get NGO details
+      if (report.userId) {
+        const ngo = await Ngo.findById(report.userId);
+        if (!ngo) {
+          return res.status(404).json({ success: false, message: "NGO not found" });
+        }
+
+        console.log("NGO found:", ngo.name);
+
+        // ✅ Check if NGO has a wallet address
+        if (!ngo.credits || !ngo.credits.walletAddress) {
+          console.error("NGO wallet address missing!");
+          return res.status(400).json({ success: false, message: "NGO wallet address missing" });
+        }
+
+        // Prepare data hash for immutability
+        const dataHash = `${report._id}-${report.treeCount}-${report.dateReported.getTime()}`;
+        console.log("Data hash for blockchain:", dataHash);
+
+        try {
+          // ✅ Call blockchain service
+          console.log("Calling blockchain service...");
+          const txHash = await blockchainService.addMRVAndVerify(
+            report._id.toString(),
+            dataHash,
+            report.treeCount,
+            ngo.credits.walletAddress,
+            tokensPerTree
+          );
+
+          console.log("Blockchain transaction successful:", txHash);
+
+          // ✅ Save TX hash & update token balance
+          report.blockchainTx = txHash;
+          await report.save();
+
+          ngo.credits.balance += report.treeCount * tokensPerTree;
+          ngo.credits.lastUpdated = new Date();
+          await ngo.save();
+
+          console.log("NGO token balance updated:", ngo.credits.balance);
+        } catch (err) {
+          console.error("Blockchain error:", err.message);
+          return res.status(500).json({ success: false, message: "Blockchain transaction failed" });
+        }
       }
     }
 
     res.json({ success: true, report });
   } catch (err) {
-    console.error('Error updating report status:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error("Error updating report status:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
-
 
 router.get("/ngos", getAllNGOs);
 router.get("/projects", getAllProjects);

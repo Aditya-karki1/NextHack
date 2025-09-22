@@ -1,23 +1,28 @@
-import pkg from "hardhat";
-const { ethers } = pkg;
+const { ethers } = require("hardhat");
 
 async function main() {
-  console.log("Deploying contracts...");
+  // Get deployer signer
+  const [deployer] = await ethers.getSigners();
+  console.log("Deploying contracts with account:", deployer.address);
 
-  // Deploy CarbonToken
-  const CarbonToken = await ethers.getContractFactory("CarbonToken");
-  const carbonToken = await CarbonToken.deploy("Carbon Token", "CTK");
-  await carbonToken.waitForDeployment();
-  console.log("✅ CarbonToken deployed to:", await carbonToken.getAddress());
+  // Get deployer balance
+  const balance = await ethers.provider.getBalance(deployer.address);
+  console.log("Deployer balance:", ethers.formatEther(balance), "ETH");
 
-  // Deploy ReportCertificate
-  const ReportCertificate = await ethers.getContractFactory("ReportCertificate");
-  const reportCertificate = await ReportCertificate.deploy("Report Certificate", "RCERT");
-  await reportCertificate.waitForDeployment();
-  console.log("✅ ReportCertificate deployed to:", await reportCertificate.getAddress());
+  // Get contract factory
+  const BlueCarbonMRV = await ethers.getContractFactory("BlueCarbonMRV");
+
+  // Deploy contract
+  const contract = await BlueCarbonMRV.deploy(); // v6 deploy returns the deployed contract
+
+  // No need to call contract.deployed() in ethers v6
+
+  console.log(`BlueCarbonMRV contract deployed at: ${contract.target || contract.address}`);
 }
 
-main().catch((err) => {
-  console.error("❌ Deployment failed:", err);
-  process.exitCode = 1;
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error("Deployment error:", error);
+    process.exit(1);
+  });

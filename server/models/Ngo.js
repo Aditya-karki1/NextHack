@@ -15,14 +15,6 @@ const ngoSchema = new mongoose.Schema({
     lastUpdated: { type: Date, default: Date.now }
   },
 
-  // // Subscription fields
-  // subscription: {
-  //   plan: { type: String, enum: ['MONTHLY', 'YEARLY'], default: 'MONTHLY' },
-  //   startDate: { type: Date, default: Date.now },
-  //   endDate: { type: Date }, // auto-calculated based on plan
-  //   isActive: { type: Boolean, default: true }
-  // },
-
   // Organization fields (embedded directly inside user)
   organization: {
     name: { type: String },
@@ -41,26 +33,6 @@ const ngoSchema = new mongoose.Schema({
     ],
     orgCreatedAt: { type: Date, default: Date.now }
   }
-});
-
-// Method to check if subscription is expired
-ngoSchema.methods.isSubscriptionActive = function () {
-  if (!this.subscription.endDate) return false;
-  return new Date() <= new Date(this.subscription.endDate);
-};
-
-// Middleware: Automatically set endDate based on plan
-ngoSchema.pre('save', function (next) {
-  if (this.isModified('subscription.plan') || this.isNew) {
-    const startDate = this.subscription.startDate || new Date();
-    this.subscription.startDate = startDate;
-    if (this.subscription.plan === 'MONTHLY') {
-      this.subscription.endDate = new Date(startDate.setMonth(startDate.getMonth() + 1));
-    } else if (this.subscription.plan === 'YEARLY') {
-      this.subscription.endDate = new Date(startDate.setFullYear(startDate.getFullYear() + 1));
-    }
-  }
-  next();
 });
 
 const Ngo = mongoose.model('Ngo', ngoSchema);
