@@ -64,7 +64,7 @@ exports.submitMRV = async (req, res) => {
     if (record.projectId) {
       await RestorationProject.findByIdAndUpdate(
         record.projectId,
-        { $push: { hasMRVReport: record._id } },
+        { $push: { hasMRVReport: record._id }, $set: { status: 'UnderVerification' } },
         { new: true, upsert: true } // Ensure field exists
       );
     }
@@ -92,13 +92,36 @@ exports.submitMRV = async (req, res) => {
 };
 
 exports.validateMRV = async (req, res) => {
-  const { recordId, status } = req.body;
-  const record = await MRVRecord.findByIdAndUpdate(
-    recordId,
-    { status },
-    { new: true }
-  );
-  res.json(record);
+  try {
+    const { recordId, status } = req.body;
+    if (!recordId) return res.status(400).json({ message: 'recordId required' });
+
+    const record = await MRVRecord.findByIdAndUpdate(recordId, { status }, { new: true });
+    if (!record) return res.status(404).json({ message: 'MRV record not found' });
+
+    // If verified, mark the project (if any) as Completed and perform downstream operations
+    if (status === 'Verified' && record.projectId) {
+      try {
+        await RestorationProject.findByIdAndUpdate(record.projectId, { status: 'Completed' });
+      } catch (projErr) {
+        console.error('Failed to update project status after MRV validation', projErr);
+      }
+    }
+
+    // If rejected, we can set project back to InProgress (or keep UnderVerification depending on policy)
+    if (status === 'Rejected' && record.projectId) {
+      try {
+        await RestorationProject.findByIdAndUpdate(record.projectId, { status: 'InProgress' });
+      } catch (projErr) {
+        console.error('Failed to update project status after MRV rejection', projErr);
+      }
+    }
+
+    res.json(record);
+  } catch (err) {
+    console.error('validateMRV error:', err);
+    res.status(500).json({ message: err.message || 'Failed to validate MRV' });
+  }
 };
 
 // Get MRV records by project identifier (accepts ObjectId or externalProjectId)

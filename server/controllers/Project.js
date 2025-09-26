@@ -84,9 +84,11 @@ exports.assignProject = async (req, res) => {
 
     project.ngoId = ngoId; // ✅ Correct field name
     project.status = "InProgress"; // ✅ Use enum value from schema
-    await project.save();
-console.log("Assigned project:", project);
-    res.status(200).json({ success: true, message: "Project assigned successfully", project });
+  await project.save();
+  // Re-query and populate ngoId to return consistent shape to clients
+  const populatedProject = await RestorationProject.findById(project._id).populate('ngoId', 'name email');
+  console.log("Assigned project:", populatedProject);
+  res.status(200).json({ success: true, message: "Project assigned successfully", project: populatedProject });
   } catch (err) {
     res.status(500).json({ success: false, message: "Error assigning project" });
   }
@@ -174,5 +176,41 @@ exports.getProjectReports = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Cancel a previously submitted request by an NGO
+exports.cancelRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { requestedBy } = req.body;
+
+    // Validate IDs
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid project ID." });
+    }
+    if (!mongoose.Types.ObjectId.isValid(requestedBy)) {
+      return res.status(400).json({ success: false, message: "Invalid user ID." });
+    }
+
+    // Find project
+    const project = await RestorationProject.findById(id);
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found." });
+    }
+
+    // Check if NGO had requested this project
+    if (!project.requestedBy || !project.requestedBy.includes(requestedBy)) {
+      return res.status(409).json({ success: false, message: "You have not requested this project." });
+    }
+
+    // Remove NGO from requestedBy array
+    project.requestedBy = project.requestedBy.filter(r => String(r) !== String(requestedBy));
+    await project.save();
+
+    res.status(200).json({ success: true, message: "Project request cancelled.", data: project });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error." });
   }
 };

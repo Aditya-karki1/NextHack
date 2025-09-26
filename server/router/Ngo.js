@@ -6,6 +6,7 @@ const {signupNgo,loginNgo} = require("../controllers/Auth");
 const { verifyNgo } = require("../controllers/Verification");
 const razorpay = require("../config/razorpay");
 const CreditListing = require("../models/CreditListing");
+const { capturePayment, verifyPayment } = require('../controllers/PaymentController');
 router.post("/verifyNgo", auth, isNgo, verifyNgo);
 
 router.post("/login", loginNgo);
@@ -75,6 +76,10 @@ console.log("NGO found:", ngo);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// Payment routes
+router.post('/capture-payment', auth, isNgo, capturePayment);
+router.post('/verify-payment', auth, isNgo, verifyPayment);
 
 // Route for sending OTP to the user's email
 // router.post("/sendotp", sendOTP);

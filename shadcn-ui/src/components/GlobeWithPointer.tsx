@@ -13,19 +13,19 @@ const GlobeWithPointer: React.FC = () => {
   useEffect(() => {
     if (!containerRef.current || !canvas3DRef.current || !canvas2DRef.current || !popupRef.current) return;
 
-    let renderer: THREE.WebGLRenderer;
-    let scene: THREE.Scene;
-    let camera: THREE.OrthographicCamera;
-    let rayCaster: THREE.Raycaster;
-    let controls: OrbitControls;
-    let globe: THREE.Points;
-    let globeMesh: THREE.Mesh;
-    let pointer: THREE.Mesh;
-    let earthTexture: THREE.Texture;
-    let mapMaterial: THREE.ShaderMaterial;
-    let popupOpenTl: gsap.core.Timeline;
-    let popupCloseTl: gsap.core.Timeline;
-    let pointerPos: THREE.Vector3;
+  let renderer: any;
+  let scene: any;
+  let camera: any;
+  let rayCaster: any;
+  let controls: any;
+  let globe: any;
+  let globeMesh: any;
+  let pointer: any;
+  let earthTexture: any;
+  let mapMaterial: any;
+  let popupOpenTl: any;
+  let popupCloseTl: any;
+  // pointerPos was unused; removed to avoid lint warning
     let clock = new THREE.Clock();
     let dragged = false;
     let mouse = new THREE.Vector2(-1, -1);
@@ -98,7 +98,7 @@ const GlobeWithPointer: React.FC = () => {
       controls.addEventListener("start", () => (timestamp = Date.now()));
       controls.addEventListener("end", () => (dragged = Date.now() - timestamp > 600));
 
-      new THREE.TextureLoader().load("https://ksenia-k.com/img/earth-map-colored.png", (mapTex) => {
+      new THREE.TextureLoader().load("https://ksenia-k.com/img/earth-map-colored.png", (mapTex: any) => {
         earthTexture = mapTex;
         earthTexture.repeat.set(1, 1);
         createGlobe();
@@ -148,7 +148,7 @@ const GlobeWithPointer: React.FC = () => {
           updateMousePosition(e.clientX, e.clientY);
           const res = checkIntersects();
           if (res.length) {
-            pointerPos = res[0].face!.normal.clone();
+            // use pointer directly
             pointer.position.copy(res[0].face!.normal);
             mapMaterial.uniforms.u_pointer.value = res[0].face!.normal;
             popupRef.current!.innerHTML = cartesianToLatLong();

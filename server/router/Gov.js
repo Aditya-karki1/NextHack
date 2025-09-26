@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const {auth,isGov} = require("../middlewares/auth");
 const {signupGov,loginGov} = require("../controllers/Auth");
-const { createProject,getAllNGOs,requestProject,getProjectReports, getAllProjects, assignProject  } = require('../controllers/Project');
+const { createProject,getAllNGOs,requestProject,cancelRequest,getProjectReports, getAllProjects, assignProject  } = require('../controllers/Project');
 const mongoose = require('mongoose');
 const RestorationProject = require('../models/RestorationProject');
 // Use memory storage
@@ -57,15 +57,15 @@ router.patch("/reports/:reportId/status", async (req, res) => {
 
     // ✅ 3. If Verified, handle project + blockchain + credits
     if (status === "Verified") {
-      console.log("Report verified. Updating project & NGO credits...");
+      console.log("Report verified. Updating project & NGO credits (marking project Completed)...");
 
       // Update project status if exists
       if (report.projectId) {
         const project = await RestorationProject.findById(report.projectId);
-        if (project && project.status !== "Verified") {
-          project.status = "Verified";
+        if (project && project.status !== "Completed") {
+          project.status = "Completed";
           await project.save();
-          console.log("Project marked as Verified:", project._id);
+          console.log("Project marked as Completed:", project._id);
         }
       }
 
@@ -181,6 +181,11 @@ router.post('/projects/:id/analysis', async (req, res) => {
 });
 // New route for an NGO to request a project
 router.put("/projects/:id/request", requestProject);
+// Cancel a previously submitted request
+router.put("/projects/:id/cancel-request", auth, (req, res, next) => {
+  // Allow NGO to cancel their own request
+  next();
+}, cancelRequest);
 router.get("/projects/:projectId/reports", auth, isGov, getProjectReports);
 // Route for sending OTP to the user's email
 // router.post("/sendotp", sendOTP);

@@ -19,6 +19,8 @@ export default function GovernmentPortal() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [showNgoVerifyModal, setShowNgoVerifyModal] = useState(false);
+  const [selectedNgo, setSelectedNgo] = useState<any | null>(null);
 
   const [newProject, setNewProject] = useState({
     title: "",
@@ -52,13 +54,14 @@ export default function GovernmentPortal() {
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) setNewProject(prev => ({ ...prev, images: Array.from(e.target.files) }));
+    const files = e.target.files;
+    if (files && files.length) setNewProject(prev => ({ ...prev, images: Array.from(files) }));
   };
 
   const handleCreateTask = async () => {
-    const formData = new FormData();
-    const fields = ["title", "areaHectares", "targetTrees", "startDate", "endDate", "lat", "lng", "description"];
-    fields.forEach(key => { if (newProject[key]) formData.append(key, newProject[key]); });
+  const formData = new FormData();
+  const fields = ["title", "areaHectares", "targetTrees", "startDate", "endDate", "lat", "lng", "description"] as const;
+  fields.forEach((key) => { const v = newProject[key]; if (v) formData.append(key, String(v)); });
     newProject.images?.forEach(img => formData.append("landImages", img));
 
     try {
@@ -78,7 +81,13 @@ export default function GovernmentPortal() {
 
   const handleAssignProject = async (projectId: string, ngoId: string) => {
     try {
-      await axios.put(`http://localhost:4000/api/v1/gov/projects/${projectId}/assign`, { ngoId }, { withCredentials: true });
+      const res = await axios.put(`http://localhost:4000/api/v1/gov/projects/${projectId}/assign`, { ngoId }, { withCredentials: true });
+      if (res?.data?.success) {
+        // optimistic update: replace the task in local state with returned populated project
+        const updatedProject = res.data.project;
+        setTasks(prev => prev.map(t => (String(t._id) === String(updatedProject._id) ? updatedProject : t)));
+      }
+      // still re-fetch to ensure consistency
       fetchAllData();
     } catch (err) {
       console.error("Error assigning project:", err);
@@ -88,6 +97,30 @@ export default function GovernmentPortal() {
   const handleVerifyTask = (task: any) => {
     setSelectedTask(task);
     setShowVerification(true);
+  };
+
+  const handleOpenVerifyNgo = (ngo: any) => {
+    setSelectedNgo(ngo);
+    setShowNgoVerifyModal(true);
+  };
+
+  const handleConfirmVerifyNgo = async (ngoId: string) => {
+    try {
+      const res = await axios.post(`http://localhost:4000/api/v1/ngo/${ngoId}/verify`, {}, { withCredentials: true });
+      if (res?.data?.ngo) {
+        // update local ngos list for immediate UI feedback
+        setNgos(prev => prev.map(n => (n._id === ngoId ? { ...n, kycStatus: "VERIFIED" } : n)));
+      }
+      setShowNgoVerifyModal(false);
+      setSelectedNgo(null);
+    } catch (error: any) {
+      // Type as any to satisfy TypeScript and log carefully
+      const msg = error?.response?.data || error?.message || String(error);
+      console.error("Error verifying NGO:", msg);
+      // still close modal to avoid blocking UI; in a real app show a toast/error
+      setShowNgoVerifyModal(false);
+      setSelectedNgo(null);
+    }
   };
 
   const handleApproveVerification = (taskId: string) => {
@@ -282,7 +315,9 @@ export default function GovernmentPortal() {
         {/* Verification Queue */}
         <TabsContent value="verification" className="space-y-6 p-4">
           <h2 className="text-2xl font-bold">Verification Queue</h2>
-          {tasks.filter(t => t.status === "Completed").map(task => (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Completed Tasks (awaiting review)</h3>
+            {tasks.filter(t => t.status === "Completed").map(task => (
             <Card key={task._id} className="p-2 m-2">
               <CardContent className="p-6 flex justify-between items-start">
                 <div>
@@ -298,7 +333,28 @@ export default function GovernmentPortal() {
                 </Button>
               </CardContent>
             </Card>
-          ))}
+            ))}
+
+            <h3 className="text-lg font-semibold mt-6">Pending NGO KYC</h3>
+            {ngos.filter(n => n.kycStatus !== "VERIFIED").length === 0 && (
+              <p className="text-sm text-gray-600">No NGOs pending verification.</p>
+            )}
+            {ngos.filter(n => n.kycStatus !== "VERIFIED").map(ngo => (
+              <Card key={ngo._id} className="p-2 m-2">
+                <CardContent className="p-4 flex justify-between items-center">
+                  <div>
+                    <h4 className="font-semibold">{ngo.name}</h4>
+                    <p className="text-sm text-gray-600">{ngo.email}</p>
+                    <p className="text-sm">Submitted Documents: {Array.isArray(ngo.documents) ? ngo.documents.length : 0}</p>
+                  </div>
+                  <div className="space-x-2">
+                    <Button variant="ghost" onClick={() => handleNgoClick(ngo._id)}>View</Button>
+                    <Button onClick={() => handleOpenVerifyNgo(ngo)} className="bg-blue-600 hover:bg-blue-700">Verify KYC</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
         {/* Analytics */}
@@ -319,6 +375,28 @@ export default function GovernmentPortal() {
           </div>
         </TabsContent>
       </Tabs>
+      {/* NGO Verify Confirmation Dialog */}
+      <Dialog open={showNgoVerifyModal} onClose={() => { setShowNgoVerifyModal(false); setSelectedNgo(null); }} className="fixed z-10 inset-0 overflow-y-auto">
+        <div className="flex items-center justify-center min-h-screen px-4">
+          <Dialog.Panel className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 m-4">
+            <Dialog.Title className="text-lg font-bold mb-2">Verify NGO KYC</Dialog.Title>
+            <div className="space-y-4">
+              <p>Are you sure you want to mark the following NGO as verified?</p>
+              {selectedNgo && (
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="font-semibold">{selectedNgo.name}</p>
+                  <p className="text-sm text-gray-600">{selectedNgo.email}</p>
+                  <p className="text-sm">Documents: {Array.isArray(selectedNgo.documents) ? selectedNgo.documents.length : 0}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end mt-6 space-x-2">
+              <Button variant="outline" onClick={() => { setShowNgoVerifyModal(false); setSelectedNgo(null); }}>Cancel</Button>
+              <Button onClick={() => selectedNgo && handleConfirmVerifyNgo(selectedNgo._id)} className="bg-blue-600 hover:bg-blue-700">Confirm Verify</Button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
     </div>
   );
 }
