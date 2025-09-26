@@ -243,6 +243,7 @@ module.exports = {
   getBalance: async (walletAddress) => {
     try {
       const balance = await contract.balanceOf(walletAddress);
+      console.log(balance);
       return ethers.formatUnits(balance, 18);
     } catch (error) {
       log("Error fetching balance:", error);

@@ -89,6 +89,7 @@ export default function CorporatePortal() {
   // Purchase credits
   const handlePurchase = async () => {
     if (!user) return alert("You must be logged in to purchase credits.");
+    console.log("user", user);
     const token = localStorage.getItem("token");
     try {
       for (const item of cart) {

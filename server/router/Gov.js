@@ -40,26 +40,18 @@ router.patch("/reports/:reportId/status", async (req, res) => {
 
     console.log("Updating report status:", reportId, status);
 
-    // ✅ 1. Find MRV Report
     if (!mongoose.Types.ObjectId.isValid(reportId)) {
       return res.status(400).json({ success: false, message: "Invalid report ID" });
     }
 
     const report = await MRVRecord.findById(reportId);
-    if (!report) {
-      return res.status(404).json({ success: false, message: "Report not found" });
-    }
+    if (!report) return res.status(404).json({ success: false, message: "Report not found" });
 
-    // ✅ 2. Update status
     report.status = status;
     await report.save();
     console.log("Report status updated in DB:", status);
 
-    // ✅ 3. If Verified, handle project + blockchain + credits
     if (status === "Verified") {
-      console.log("Report verified. Updating project & NGO credits...");
-
-      // Update project status if exists
       if (report.projectId) {
         const project = await RestorationProject.findById(report.projectId);
         if (project && project.status !== "Verified") {
@@ -69,28 +61,16 @@ router.patch("/reports/:reportId/status", async (req, res) => {
         }
       }
 
-      // ✅ Get NGO details
       if (report.userId) {
         const ngo = await Ngo.findById(report.userId);
-        if (!ngo) {
-          return res.status(404).json({ success: false, message: "NGO not found" });
-        }
-
-        console.log("NGO found:", ngo.name);
-
-        // ✅ Check if NGO has a wallet address
-        if (!ngo.credits || !ngo.credits.walletAddress) {
-          console.error("NGO wallet address missing!");
+        if (!ngo) return res.status(404).json({ success: false, message: "NGO not found" });
+        if (!ngo.credits || !ngo.credits.walletAddress)
           return res.status(400).json({ success: false, message: "NGO wallet address missing" });
-        }
 
-        // Prepare data hash for immutability
         const dataHash = `${report._id}-${report.treeCount}-${report.dateReported.getTime()}`;
         console.log("Data hash for blockchain:", dataHash);
 
         try {
-          // ✅ Call blockchain service
-          console.log("Calling blockchain service...");
           const txHash = await blockchainService.addMRVAndVerify(
             report._id.toString(),
             dataHash,
@@ -101,15 +81,19 @@ router.patch("/reports/:reportId/status", async (req, res) => {
 
           console.log("Blockchain transaction successful:", txHash);
 
-          // ✅ Save TX hash & update token balance
           report.blockchainTx = txHash;
           await report.save();
 
-          ngo.credits.balance += report.treeCount * tokensPerTree;
+          // ✅ Fetch actual on-chain balance
+          const actualBalance = await blockchainService.getBalance(ngo.credits.walletAddress);
+          console.log("Actual on-chain NGO balance:", actualBalance);
+
+          // Update local DB with actual on-chain balance
+          ngo.credits.balance = parseFloat(actualBalance);
           ngo.credits.lastUpdated = new Date();
           await ngo.save();
 
-          console.log("NGO token balance updated:", ngo.credits.balance);
+          console.log("NGO token balance updated in DB:", ngo.credits.balance);
         } catch (err) {
           console.error("Blockchain error:", err.message);
           return res.status(500).json({ success: false, message: "Blockchain transaction failed" });
