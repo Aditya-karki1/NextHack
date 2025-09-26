@@ -9,6 +9,7 @@ const creditListingSchema = require("../models/CreditListing");
 const mongoose = require('mongoose');
 const Comp = require("../models/Comp");
 const blockchainService = require('../services/blockchainService');
+const { captureCompanyPayment, verifyCompanyPayment } = require('../controllers/PaymentController');
 router.post("/login", loginComp);
 
 // Route for user signup
@@ -136,6 +137,10 @@ router.patch("/purchase/:creditId", async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// Payment routes for company purchases
+router.post('/capture-payment', auth, isComp, captureCompanyPayment);
+router.post('/verify-payment', auth, isComp, verifyCompanyPayment);
 
 
 
