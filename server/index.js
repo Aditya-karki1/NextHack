@@ -6,7 +6,9 @@ const PORT = process.env.PORT || 4000;
 
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-
+const multer = require("multer");
+const upload = multer();
+const axios = require("axios");
 // DB connection
 const dbConnect = require("./config/database");
 dbConnect();
