@@ -177,51 +177,67 @@ exports.signupNgo = async (req, res) => {
   }
 };
 
-exports.signupComp = async (req,res) => {
-    try{
-        const {name,email,password} = req.body;
+exports.signupComp = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
 
-        if(!name || !email || !password){
-            return res.status(403).json({
-                success:false,
-                message:"All fields are required"
-            })
-        }
-
-        const existingUser = await Comp.findOne({email});
-
-        if(existingUser){
-            return res.status(401).json({
-                success:false,
-                message:"user already exists"
-            })
-        }
-
-        const hashedPassword =  await bcrypt.hash(password,10);
-
-        const user = await Comp.create({ 
-            name,
-            email,
-            password:hashedPassword
-        })
-
-
-        return res.status(200).json({
-            success:true,
-            message:" Comp Account created successfully",
-            user,
-        })
-
-
-    }catch(error){
-        console.log(error);
-        return res.status(500).json({
-            success:false,
-            message:"Comp User cannot be registered . Please try again later"
-        })
+    // Validate input
+    if (!name || !email || !password) {
+      return res.status(403).json({
+        success: false,
+        message: "All fields are required"
+      });
     }
-};
 
+    // Check if user already exists
+    const existingUser = await Comp.findOne({ email });
+    if (existingUser) {
+      return res.status(401).json({
+        success: false,
+        message: "User already exists"
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Auto-generate blockchain wallet for company
+    const wallet = ethers.Wallet.createRandom();
+
+    // Create new company user with wallet and credits
+    const user = await Comp.create({
+      name,
+      email,
+      password: hashedPassword,
+      credits: {
+        balance: 0,
+        walletAddress: wallet.address,
+        lastUpdated: new Date()
+      }
+    });
+
+    console.log("Company wallet created:", wallet.address);
+
+    return res.status(200).json({
+      success: true,
+      message: "Company account created successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        walletAddress: wallet.address,
+        creditsBalance: user.credits.balance
+      }
+    });
+
+  } catch (error) {
+    console.error("Signup error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Company user cannot be registered. Please try again later"
+    });
+  }
+};
 exports.loginGov = async (req,res) => {
     try{
 

@@ -65,6 +65,10 @@ export default function NGOPortal() {
   const [address, setAddress] = useState<string>('');
   const [geoBoundary, setGeoBoundary] = useState<string>('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [sellAmount, setSellAmount] = useState<number>(0);
+const [pricePerCredit, setPricePerCredit] = useState<number>(10); // default price per credit
+const [selling, setSelling] = useState(false);
+
 
   const clearError = (field: string) => setErrors(prev => {
     const copy = { ...prev };
@@ -429,6 +433,8 @@ const availableCreditsAmount = myCredits
           <TabsTrigger value="mytasks">My Tasks</TabsTrigger>
           <TabsTrigger value="wallet">Digital Wallet</TabsTrigger>
           <TabsTrigger value="profile">NGO Profile</TabsTrigger>
+          <TabsTrigger value="sellcredits">Sell Credits</TabsTrigger>
+
         </TabsList>
 
 
@@ -561,6 +567,67 @@ const availableCreditsAmount = myCredits
 </div>
 
         </TabsContent>
+    <TabsContent value="sellcredits" className="space-y-6">
+  <h2 className="text-2xl font-bold">Sell Your Credits</h2>
+  <Card>
+    <CardContent className="space-y-4">
+      <p className="text-gray-600">
+        You have <span className="font-bold">{availableCredits}</span> credits available.
+      </p>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium">Amount of Credits to Sell</label>
+        <input
+          type="number"
+          value={sellAmount}
+          onChange={(e) => setSellAmount(Number(e.target.value))}
+          className="w-full border rounded p-2"
+          min={1}
+          max={availableCredits}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-medium">Price per Credit (INR)</label>
+        <input
+          type="number"
+          value={pricePerCredit}
+          onChange={(e) => setPricePerCredit(Number(e.target.value))}
+          className="w-full border rounded p-2"
+          min={1}
+        />
+      </div>
+
+      <Button
+        disabled={selling || sellAmount <= 0 || sellAmount > availableCredits}
+        onClick={async () => {
+          setSelling(true);
+          try {
+            const res = await axios.post(
+              `http://localhost:4000/api/v1/ngo/${currentUserId}/list-credits`,
+              {
+                amount: sellAmount,
+                price: pricePerCredit,
+              },
+              { withCredentials: true }
+            );
+
+            if (res.status === 200) {
+              toast({ title: "Success", description: "Credits listed for sale!" });
+              setSellAmount(0);
+            }
+          } catch (err) {
+            toast({ title: "Error", description: "Failed to list credits for sale." });
+          } finally {
+            setSelling(false);
+          }
+        }}
+      >
+        {selling ? "Listing..." : "List Credits"}
+      </Button>
+    </CardContent>
+  </Card>
+</TabsContent>
 
        <TabsContent value="wallet" className="space-y-6">
   <div className="flex justify-between items-center">

@@ -5,6 +5,7 @@ const {auth,isNgo} = require("../middlewares/auth");
 const {signupNgo,loginNgo} = require("../controllers/Auth");
 const { verifyNgo } = require("../controllers/Verification");
 const razorpay = require("../config/razorpay");
+const CreditListing = require("../models/CreditListing");
 router.post("/verifyNgo", auth, isNgo, verifyNgo);
 
 router.post("/login", loginNgo);
@@ -20,6 +21,33 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+router.post("/:ngoId/list-credits", async (req, res) => {
+  const { ngoId } = req.params;
+  const { amount, price } = req.body;
+console.log("Listing credits:", { ngoId, amount, price });
+  try {
+    const ngo = await Ngo.findById(ngoId);
+    if (!ngo) return res.status(404).json({ message: "NGO not found" });
+
+    if (ngo.credits.balance < amount) {
+      return res.status(400).json({ message: "Not enough credits available." });
+    }
+
+    const listing = await CreditListing.create({
+      ngoId,
+      amount,
+      price,
+      status: "FOR_SALE"
+    });
+
+    res.status(200).json({ message: "Credits listed successfully!", listing });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 
 
 // Update KYC status
