@@ -20,7 +20,7 @@ import ProtectedRoute from "./context/ProtectedRoute";
 import NgoDetail from "./pages/NgoDetail";
 import ProjectReports from "./pages/ProjectReports";
 import SubscriptionPage from "./pages/Subscription";
-
+import MRVReportDetail from "./pages/MRVReportDetail";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -57,6 +57,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+                <Route path="/government/projects/:projectId/reports/:mrvId" element={<MRVReportDetail />} />
             <Route path="/government/projects/:projectId/reports" element={<ProjectReports />} />
             <Route path="/subscription" element={<SubscriptionPage />} />
             
