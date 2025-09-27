@@ -93,7 +93,7 @@ export default function MRVReportModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl bg-gradient-subtle border-0 shadow-elegant">
+      <DialogContent className="max-w-2xl bg-gradient-subtle border-0 shadow-elegant bg-green-200">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-foreground">Submit MRV Report</DialogTitle>
           <DialogDescription>

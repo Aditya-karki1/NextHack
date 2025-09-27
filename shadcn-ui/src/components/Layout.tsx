@@ -1,5 +1,6 @@
 import Sidebar from './Sidebar';
 import { ReactNode } from 'react';
+import { Toaster } from '@/components/ui/toaster';
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </header>
         <main>{children}</main>
       </div>
+      <Toaster />
     </div>
   );
 }

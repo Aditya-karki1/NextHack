@@ -39,71 +39,328 @@ interface CartItem {
   quantity: number;
 }
 
+interface UserData {
+  _id: string;
+  name: string;
+  email: string;
+  kycStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  role?: string;
+  organization?: {
+    name?: string;
+    type?: string;
+    address?: string;
+    phone?: string;
+    website?: string;
+    employeeCount?: number;
+    incorporationDate?: string;
+    businessDescription?: string;
+    contact?: {
+      phone?: string;
+      email?: string;
+    };
+  };
+  credits?: {
+    balance?: number;
+    walletAddress?: string;
+    lastUpdated?: string;
+  };
+  transactions?: Array<{
+    _id?: string;
+    creditId?: string;
+    quantity?: number;
+    pricePerUnit?: number;
+    type?: string;
+    timestamp?: string;
+  }>;
+  registrationNumber?: string;
+  panNumber?: string;
+  taxId?: string;
+  phoneNumber?: string;
+  website?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  contactPersonName?: string;
+  contactPersonDesignation?: string;
+  businessDescription?: string;
+  employeeCount?: number;
+  incorporationDate?: string;
+  carbonFootprint?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface Portfolio {
+  purchased: Credit[];
+  retired: Credit[];
+  totalSpent?: number;
+  carbonReduction?: number;
+}
+
 // ------------------- Component -------------------
 export default function CorporatePortal() {
   const { user } = useAuth(); // logged-in company info
   const { toast } = useToast(); // for notifications
+  
+  // State for fetched data
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [portfolio, setPortfolio] = useState<Portfolio>({ purchased: [], retired: [] });
   const [credits, setCredits] = useState<Credit[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [purchasedCredits, setPurchasedCredits] = useState<Credit[]>([]);
-  const [retiredCredits, setRetiredCredits] = useState<Credit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataFetching, setDataFetching] = useState(false);
+  
+  // UI states
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const [showVerificationForm, setShowVerificationForm] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState<'not_verified' | 'under_verification' | 'verified'>('not_verified');
+  const [verificationStatus, setVerificationStatus] = useState<'not_verified' | 'under_verification' | 'verified'>('verified'); // Default to verified for development
+  
+  // Fixed carbon footprint (can be made dynamic later)
   const [carbonFootprint] = useState<number>(3000); // Fixed at 3000 tonnes
   
   // Initialize verification status based on user's existing KYC status
   useEffect(() => {
-    if (user) {
-      const userKycStatus = (user as any)?.kycStatus;
-      if (userKycStatus === 'verified') {
+    if (user || userData) {
+      const currentUser = userData || user;
+      const userKycStatus = (currentUser as any)?.kycStatus;
+      
+      // For development - always set to verified
+      setVerificationStatus('verified');
+      console.log("🔧 Development Mode: All users set to VERIFIED status");
+      
+      /* Original logic (commented for development):
+      if (userKycStatus === 'VERIFIED' || userKycStatus === 'verified') {
         setVerificationStatus('verified');
-      } else if (userKycStatus === 'pending') {
+      } else if (userKycStatus === 'PENDING' || userKycStatus === 'pending') {
         setVerificationStatus('under_verification');
       } else {
         setVerificationStatus('not_verified');
       }
+      */
     }
-  }, [user]);
+  }, [user, userData]);
+
+  // Comprehensive data fetching function
+  const fetchAllUserData = async () => {
+    if (!user) return;
+    
+    setDataFetching(true);
+    const userId = (user as any)?._id;
+
+    if (!userId) {
+      toast({
+        title: "Authentication Error",
+        description: "User ID not found. Please log in again.",
+        variant: "destructive",
+      });
+      setDataFetching(false);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Fetch user profile data
+      const profileRes = await axios.get(
+        `http://localhost:4000/api/v1/company/profile/${userId}`,
+        { withCredentials: true }
+      );
+      
+      if (profileRes.data.success) {
+        const companyData = profileRes.data.company;
+        setUserData(companyData);
+        
+        // Update verification status based on backend response
+        const kycStatus = companyData.kycStatus;
+        
+        // For development - always set to verified regardless of backend status
+        setVerificationStatus('verified');
+        console.log("🔧 Development Override: KYC Status forced to VERIFIED (actual:", kycStatus, ")");
+        
+        /* Original logic (commented for development):
+        if (kycStatus === 'VERIFIED') {
+          setVerificationStatus('verified');
+        } else if (kycStatus === 'PENDING') {
+          setVerificationStatus('under_verification');
+        } else {
+          setVerificationStatus('not_verified');
+        }
+        */
+        
+        // Removed excessive success toast for profile loading
+      }
+
+      // Fetch marketplace credits
+      const creditsRes = await axios.get(
+        "http://localhost:4000/api/v1/company/credits",
+        { withCredentials: true }
+      );
+      
+      if (creditsRes.data) {
+        const sortedCredits = creditsRes.data.sort((a: Credit, b: Credit) => (b.amount || 0) - (a.amount || 0));
+        setCredits(sortedCredits);
+        // Removed excessive marketplace credits toast
+      }
+
+      // Fetch user portfolio
+      console.log("Fetching portfolio for userId:", userId);
+      const portfolioRes = await axios.get(
+        `http://localhost:4000/api/v1/company/portfolio/${userId}`,
+        { withCredentials: true }
+      );
+      
+      console.log("Portfolio response:", portfolioRes.data);
+      
+      if (portfolioRes.data.success) {
+        const portfolioData = portfolioRes.data;
+        console.log("🎯 Portfolio Data Breakdown:");
+        console.log("Purchased array:", portfolioData.purchased);
+        console.log("Retired array:", portfolioData.retired);
+        console.log("Total purchased transactions:", portfolioData.purchased?.length || 0);
+        console.log("Total retired transactions:", portfolioData.retired?.length || 0);
+        
+        setPortfolio({
+          purchased: portfolioData.purchased || [],
+          retired: portfolioData.retired || [],
+          totalSpent: portfolioData.totalSpent || 0,
+          carbonReduction: portfolioData.carbonReduction || 0
+        });
+        
+        // Removed excessive portfolio success toast
+      }
+
+      // Show single success message instead of multiple toasts
+      toast({
+        title: "Dashboard Updated",
+        description: "Your company data has been refreshed successfully.",
+        variant: "success",
+      });
+
+    } catch (error: any) {
+      console.error("Error fetching user data:", error);
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      
+      // Show the actual error message from backend
+      toast({
+        title: "Failed to Load Data",
+        description: error.response?.data?.message || error.message || "Unknown error occurred",
+        variant: "destructive",
+      });
+
+      // Fallback: try to fetch just credits if profile fails
+      try {
+        const creditsRes = await axios.get(
+          "http://localhost:4000/api/v1/company/credits",
+          { withCredentials: true }
+        );
+        
+        if (creditsRes.data) {
+          const sortedCredits = creditsRes.data.sort((a: Credit, b: Credit) => (b.amount || 0) - (a.amount || 0));
+          setCredits(sortedCredits);
+        }
+      } catch (creditsError) {
+        console.error("Failed to fetch credits as fallback:", creditsError);
+      }
+    } finally {
+      setDataFetching(false);
+      setLoading(false);
+    }
+  };
+  
+  // Function to handle verification submission
+  const submitVerification = async (verificationData: any) => {
+    if (!user) return;
+    
+    setLoading(true);
+    const userId = (user as any)?._id;
+
+    try {
+      const response = await axios.post(
+        `http://localhost:4000/api/v1/company/verify/${userId}`,
+        verificationData,
+        { withCredentials: true }
+      );
+      
+      if (response.data.success) {
+        setUserData(response.data.company);
+        setVerificationStatus('verified');
+        setShowVerificationForm(false);
+        
+        toast({
+          title: "Verification Submitted Successfully! ✅",
+          description: "Your company verification has been completed and approved.",
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: "Verification Failed",
+          description: response.data.message || "Failed to submit verification",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error('Error submitting verification:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to submit verification. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // --- derived metrics for dashboard analytics ---
-  const totalMarketplaceCredits = credits.reduce((s, c) => s + (c.amount || 0), 0);
-  const totalPurchased = purchasedCredits.reduce((s, c) => s + (c.amount || 0), 0);
-  const totalRetired = retiredCredits.reduce((s, c) => s + (c.amount || 0), 0);
+  // Backend data should be used for purchased credits since available balance = purchased credits
+  const backendBalance = userData?.credits?.balance || (user as any)?.credits?.balance || 0;
+  const totalPurchased = backendBalance; // Available balance represents purchased credits
+  const totalRetired = portfolio.retired.reduce((s: number, c: Credit) => s + (c.amount || 0), 0);
   const availableInWallet = Math.max(0, totalPurchased - totalRetired);
   const totalCartValue = cart.reduce(
-    (sum, item) => sum + item.credit.price * item.quantity,
+    (sum: number, item: CartItem) => sum + item.credit.price * item.quantity,
     0
   );
 
-  // Fetch marketplace credits
+  // Main data fetching effect
+  useEffect(() => {
+    if (user) {
+      fetchAllUserData();
+    }
+  }, [user]);
+
+  // Fetch marketplace credits (legacy function - now part of fetchAllUserData)
   useEffect(() => {
     const fetchCredits = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:4000/api/v1/company/credits", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        // Sort credits by amount (highest first)
-        const sortedCredits = res.data.sort((a: Credit, b: Credit) => (b.amount || 0) - (a.amount || 0));
-        setCredits(sortedCredits);
+      // This is now handled by fetchAllUserData, keeping for backwards compatibility
+      if (!userData && user) {
+        try {
+          const res = await axios.get("http://localhost:4000/api/v1/company/credits", {
+            withCredentials: true
+          });
+          // Sort credits by amount (highest first)
+          const sortedCredits = res.data.sort((a: Credit, b: Credit) => (b.amount || 0) - (a.amount || 0));
+          setCredits(sortedCredits);
 
-        // Optional: Fetch purchased and retired credits
-        const portfolioRes = await axios.get(
-          `http://localhost:4000/api/v1/company/portfolio/${(user as any)?._id ?? ''}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        setPurchasedCredits(portfolioRes.data.purchased || []);
-        setRetiredCredits(portfolioRes.data.retired || []);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-      } finally {
-        setLoading(false);
+          // Optional: Fetch purchased and retired credits
+          const portfolioRes = await axios.get(
+            `http://localhost:4000/api/v1/company/portfolio/${(user as any)?._id ?? ''}`,
+            { withCredentials: true }
+          );
+          setPortfolio({
+            purchased: portfolioRes.data.purchased || [],
+            retired: portfolioRes.data.retired || [],
+            totalSpent: portfolioRes.data.totalSpent || 0,
+            carbonReduction: portfolioRes.data.carbonReduction || 0
+          });
+        } catch (err) {
+          console.error("Error fetching data:", err);
+        } finally {
+          setLoading(false);
+        }
       }
     };
-    if (user) fetchCredits();
-  }, [user]);
+    if (user && !userData) fetchCredits();
+  }, [user, userData]);
 
   // Add to cart (reduce from UI display only, not DB)
   const handleAddToCart = (credit: Credit) => {
@@ -163,6 +420,7 @@ export default function CorporatePortal() {
     toast({
       title: "Added to Cart",
       description: `${availableAmount} credits from ${credit.ngoId?.organization?.name || credit.ngoId?.name || 'NGO'} added to cart.`,
+      variant: "success",
     });
   };
 
@@ -207,14 +465,14 @@ export default function CorporatePortal() {
     toast({
       title: "Payment Successful!",
       description: "Your carbon credits have been purchased and added to your portfolio.",
+      variant: "success",
     });
     
     // Refresh the data to get updated credits and portfolio
     if (user) {
-      const token = localStorage.getItem("token");
       // Refetch credits
       axios.get("http://localhost:4000/api/v1/company/credits", {
-        headers: { Authorization: `Bearer ${token}` },
+        withCredentials: true
       }).then(res => {
         setCredits(res.data);
       }).catch(console.error);
@@ -222,16 +480,25 @@ export default function CorporatePortal() {
       // Refetch portfolio
       axios.get(
         `http://localhost:4000/api/v1/company/portfolio/${(user as any)?._id ?? ''}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { withCredentials: true }
       ).then(portfolioRes => {
-        setPurchasedCredits(portfolioRes.data.purchased || []);
-        setRetiredCredits(portfolioRes.data.retired || []);
+        setPortfolio({
+          purchased: portfolioRes.data.purchased || [],
+          retired: portfolioRes.data.retired || [],
+          totalSpent: portfolioRes.data.totalSpent || 0,
+          carbonReduction: portfolioRes.data.carbonReduction || 0
+        });
       }).catch(console.error);
     }
-  };  // Retire credits
+  };  
+
+  // Retire credits
   const handleRetireCredits = (credit: Credit) => {
-    setPurchasedCredits(purchasedCredits.filter((c) => c._id !== credit._id));
-    setRetiredCredits([...retiredCredits, credit]);
+    setPortfolio(prev => ({
+      ...prev,
+      purchased: prev.purchased.filter((c: Credit) => c._id !== credit._id),
+      retired: [...prev.retired, credit]
+    }));
   };
 
   if (loading) return (
@@ -261,6 +528,7 @@ export default function CorporatePortal() {
       <CompanyVerification
         user={user}
         onBack={() => setShowVerificationForm(false)}
+        onSubmitVerification={submitVerification}
         onVerificationSubmitted={() => {
           // Step 1: Close verification form and immediately verify
           setShowVerificationForm(false);
@@ -270,6 +538,7 @@ export default function CorporatePortal() {
           toast({
             title: "🎉 Verification Complete!",
             description: "Your company has been successfully verified! You can now purchase carbon credits.",
+            variant: "success",
           });
         }}
       />
@@ -282,15 +551,48 @@ export default function CorporatePortal() {
         {/* Header: greeting/company on left, title on right */}
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <p className="text-5xl font-bold text-foreground uppercase">Hello, {(user as any)?.name || 'Corporate Partner'}</p>
+            <p className="text-5xl font-bold text-foreground uppercase">
+              Hello, {userData?.name || (user as any)?.name || 'Corporate Partner'}
+            </p>
             <div className="mt-2 flex items-center gap-3">
-              {/* <div>
-                <Badge variant="outline" className="px-3 py-1">
-                  <CheckCircle className="w-4 h-4 mr-1" />
-                  Verified
+              <div className="text-lg font-semibold text-foreground">
+                {userData?.organization?.name || (user as any)?.organization?.name || 'Company Name'}
+              </div>
+              {dataFetching && (
+                <Badge variant="outline" className="px-3 py-1 animate-pulse">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full animate-spin mr-2"></div>
+                  Loading Data...
                 </Badge>
-              </div> */}
-              <div className="text-lg font-semibold text-foreground">{(user as any)?.organization?.name ?? ''}</div>
+              )}
+            </div>
+            
+            {/* Refresh Data Button */}
+            <div className="mt-3 flex items-center gap-3">
+              <Button
+                onClick={fetchAllUserData}
+                disabled={dataFetching}
+                variant="outline"
+                size="sm"
+                className="bg-white/50 hover:bg-white/70"
+              >
+                {dataFetching ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Fetching...
+                  </>
+                ) : (
+                  <>
+                    <TrendingUp className="w-4 h-4 mr-2" />
+                    Refresh Data
+                  </>
+                )}
+              </Button>
+              
+              {userData && (
+                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 px-3 py-1">
+                  ✓ Data Loaded
+                </Badge>
+              )}
             </div>
             
             {/* Carbon Footprint Display */}
@@ -298,7 +600,7 @@ export default function CorporatePortal() {
               <div className="flex items-center gap-4">
                 <div className="text-lg font-medium text-gray-700">Company's Carbon Footprint:</div>
                 <Badge className="bg-red-100 text-red-700 border-red-200 px-3 py-1">
-                  3000 tonnes Carbon
+                  {userData?.carbonFootprint || carbonFootprint} tonnes Carbon
                 </Badge>
               </div>
             </div>
@@ -402,7 +704,7 @@ export default function CorporatePortal() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-emerald-100 text-lg font-medium">Available in Wallet</p>
-                      <p className="text-5xl font-bold mt-1">{availableInWallet}</p>
+                      <p className="text-5xl font-bold mt-1">{userData?.credits?.balance || (user as any)?.credits?.balance || 0}</p>
                       <p className="text-md text-emerald-100 mt-1">tCarbon Credits</p>
                     </div>
                     <div className="bg-white/20 p-3 rounded-lg">
@@ -411,7 +713,7 @@ export default function CorporatePortal() {
                   </div>
                   <div className="flex items-center mt-4">
                     <TrendingUp className="w-4 h-4 mr-1" />
-                    <span className="text-md">+25%</span>
+                    <span className="text-md">Backend Balance: {userData?.credits?.balance || (user as any)?.credits?.balance || 0}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -421,7 +723,7 @@ export default function CorporatePortal() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-blue-100 text-lg font-medium">Purchased</p>
-                      <p className="text-5xl font-bold mt-1">{totalPurchased}</p>
+                      <p className="text-5xl font-bold mt-1">{userData?.credits?.balance || (user as any)?.credits?.balance || 0}</p>
                       <p className="text-md text-blue-100 mt-1">tCarbon Credits</p>
                     </div>
                     <div className="bg-white/20 p-3 rounded-lg">
@@ -430,7 +732,7 @@ export default function CorporatePortal() {
                   </div>
                   <div className="flex items-center mt-4">
                     <TrendingUp className="w-4 h-4 mr-1" />
-                    <span className="text-md">+12%</span>
+                    <span className="text-md">Total Purchased Credits</span>
                   </div>
                 </CardContent>
               </Card>
@@ -440,7 +742,7 @@ export default function CorporatePortal() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-purple-100 text-lg font-medium">Retired</p>
-                      <p className="text-5xl font-bold mt-1">{totalRetired}</p>
+                      <p className="text-5xl font-bold mt-1">{portfolio.retired.length}</p>
                       <p className="text-md text-purple-100 mt-1">tCarbon Offset</p>
                     </div>
                     <div className="bg-white/20 p-3 rounded-lg">
@@ -449,7 +751,7 @@ export default function CorporatePortal() {
                   </div>
                   <div className="flex items-center mt-4">
                     <TrendingUp className="w-4 h-4 mr-1" />
-                    <span className="text-md">+8%</span>
+                    <span className="text-md">Carbon Reduction: {portfolio.carbonReduction || 0}t</span>
                   </div>
                 </CardContent>
               </Card>
@@ -458,17 +760,17 @@ export default function CorporatePortal() {
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-amber-100 text-lg font-medium">Cart Value</p>
-                      <p className="text-5xl font-bold mt-1">${totalCartValue.toFixed(0)}</p>
-                      <p className="text-md text-amber-100 mt-1">Pending Purchase</p>
+                      <p className="text-amber-100 text-lg font-medium">Transactions</p>
+                      <p className="text-5xl font-bold mt-1">{userData?.transactions?.length || (user as any)?.transactions?.length || 0}</p>
+                      <p className="text-md text-amber-100 mt-1">Total Transactions</p>
                     </div>
                     <div className="bg-white/20 p-3 rounded-lg">
-                      <Coins className="w-6 h-6 text-white" />
+                      <BarChart3 className="w-6 h-6 text-white" />
                     </div>
                   </div>
                   <div className="flex items-center mt-4">
                     <TrendingUp className="w-4 h-4 mr-1" />
-                    <span className="text-md">+15%</span>
+                    <span className="text-md">Blockchain Records</span>
                   </div>
                 </CardContent>
               </Card>
@@ -582,25 +884,101 @@ export default function CorporatePortal() {
               <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
                 <CardHeader className="pb-4">
                   <CardTitle className="text-2xl font-semibold text-foreground">Monthly Progress</CardTitle>
-                  <CardDescription className="text-lg">Projects completed and credits earned over time</CardDescription>
+                  <CardDescription className="text-lg">Credits purchased by month - showing purchase trends</CardDescription>
                 </CardHeader>
                 <CardContent className="p-6">
-                  <div className="h-48 w-full bg-gradient-to-br from-emerald-100 to-sky-100 rounded-lg p-4 flex items-end">
-                    <svg className="w-full h-full" viewBox="0 0 100 30" preserveAspectRatio="none">
-                      {(() => {
-                        const months = 6;
-                        const values: number[] = Array(months).fill(0);
-                        purchasedCredits.forEach((c) => {
-                          const date = (c as any).createdAt ? new Date((c as any).createdAt) : null;
-                          const idx = date ? Math.min(months - 1, Math.max(0, new Date().getMonth() - date.getMonth())) : months - 1;
-                          values[idx] += c.amount || 0;
-                        });
-                        const max = Math.max(...values, 1);
-                        const points = values.map((v, i) => `${(i / (months - 1)) * 100},${30 - (v / max) * 28}`);
-                        return <polyline fill="rgba(34,197,94,0.3)" stroke="#10b981" strokeWidth="3" points={points.join(' ')} />;
-                      })()}
-                    </svg>
-                  </div>
+                  {(() => {
+                    // Get transactions from user data
+                    const userTransactions = (userData?.transactions || (user as any)?.transactions || []);
+                    const portfolioTransactions = [...portfolio.purchased, ...portfolio.retired];
+                    const displayTransactions = userTransactions.length > 0 ? userTransactions : portfolioTransactions;
+                    
+                    // Process monthly data
+                    const monthlyData: { [key: string]: number } = {};
+                    const currentDate = new Date();
+                    
+                    // Initialize last 6 months
+                    for (let i = 5; i >= 0; i--) {
+                      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+                      const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                      monthlyData[monthKey] = 0;
+                    }
+                    
+                    // Aggregate transaction data by month
+                    displayTransactions.forEach((transaction: any) => {
+                      const transactionDate = new Date(transaction.timestamp || transaction.createdAt);
+                      if (transactionDate) {
+                        const monthKey = transactionDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                        const amount = transaction.quantity || transaction.amount || 0;
+                        
+                        if (monthlyData[monthKey] !== undefined) {
+                          monthlyData[monthKey] += amount;
+                        }
+                      }
+                    });
+                    
+                    const months = Object.keys(monthlyData);
+                    const values = Object.values(monthlyData);
+                    const maxValue = Math.max(...values, 50); // Minimum scale of 50
+                    
+                    return (
+                      <div>
+                        {/* Bar Chart */}
+                        <div className="h-64 bg-gradient-to-br from-emerald-50 to-sky-50 rounded-lg p-4 border border-emerald-100">
+                          <div className="flex items-end justify-between h-full space-x-2">
+                            {months.map((month, index) => {
+                              const value = values[index];
+                              const height = Math.max((value / maxValue) * 100, 2); // Minimum 2% height for visibility
+                              
+                              return (
+                                <div key={month} className="flex flex-col items-center flex-1">
+                                  {/* Bar */}
+                                  <div className="relative w-full flex items-end">
+                                    <div
+                                      className="w-full bg-gradient-to-t from-emerald-400 to-emerald-300 rounded-t-md border border-emerald-200 transition-all duration-300 hover:from-emerald-500 hover:to-emerald-400 cursor-pointer shadow-sm"
+                                      style={{ height: `${height}%` }}
+                                      title={`${month}: ${value} credits purchased`}
+                                    >
+                                      {/* Value label on top of bar */}
+                                      {value > 0 && (
+                                        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-emerald-600 bg-white px-1 py-0.5 rounded shadow-sm border">
+                                          {value}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {/* Month label */}
+                                  <div className="mt-2 text-xs font-medium text-gray-600 text-center">
+                                    {month}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        
+                        {/* Summary Stats */}
+                        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="text-center p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                            <div className="text-lg font-bold text-emerald-600">{values.reduce((a, b) => a + b, 0)}</div>
+                            <div className="text-xs text-emerald-600">Total Credits</div>
+                          </div>
+                          <div className="text-center p-3 bg-sky-50 rounded-lg border border-sky-100">
+                            <div className="text-lg font-bold text-sky-600">{Math.round(values.reduce((a, b) => a + b, 0) / 6)}</div>
+                            <div className="text-xs text-sky-600">Avg/Month</div>
+                          </div>
+                          <div className="text-center p-3 bg-purple-50 rounded-lg border border-purple-100">
+                            <div className="text-lg font-bold text-purple-600">{Math.max(...values)}</div>
+                            <div className="text-xs text-purple-600">Peak Month</div>
+                          </div>
+                          <div className="text-center p-3 bg-orange-50 rounded-lg border border-orange-100">
+                            <div className="text-lg font-bold text-orange-600">{displayTransactions.length}</div>
+                            <div className="text-xs text-orange-600">Transactions</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </div>
@@ -608,8 +986,21 @@ export default function CorporatePortal() {
             {/* Digital Wallet Section */}
             <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
               <CardHeader className="pb-4">
-                <CardTitle className="text-2xl font-semibold text-foreground">Digital Wallet</CardTitle>
-                <CardDescription className="text-lg">Carbon credit transactions and portfolio overview</CardDescription>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-2xl font-semibold text-foreground">Digital Wallet</CardTitle>
+                    <CardDescription className="text-lg">Carbon credit transactions and portfolio overview</CardDescription>
+                  </div>
+                  <Button 
+                    onClick={fetchAllUserData} 
+                    variant="outline" 
+                    size="sm"
+                    disabled={dataFetching}
+                    className="bg-blue-50 hover:bg-blue-100"
+                  >
+                    {dataFetching ? "Loading..." : "🔄 Refresh Data"}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="p-6">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -618,36 +1009,81 @@ export default function CorporatePortal() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b bg-muted/50">
-                            <th className="text-left p-4 font-medium text-md">Project</th>
+                            <th className="text-left p-4 font-medium text-md">Organization</th>
                             <th className="text-left p-4 font-medium text-md">Credits</th>
                             <th className="text-left p-4 font-medium text-md">Date</th>
                             <th className="text-left p-4 font-medium text-md">Status</th>
+                            <th className="text-left p-4 font-medium text-md">Price</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {purchasedCredits.length === 0 && retiredCredits.length === 0 && (
-                            <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No transactions yet</td></tr>
-                          )}
-                          {purchasedCredits.map((c) => (
-                            <tr key={c._id} className="border-b hover:bg-muted/30 transition-colors">
-                              <td className="p-4">{c.ngoId?.organization?.name || c.ngoId?.name || 'Unknown'}</td>
-                              <td className="p-4 font-medium">{c.amount} tCarbon</td>
-                              <td className="p-4 text-sm text-muted-foreground">{(c as any).createdAt ? new Date((c as any).createdAt).toLocaleDateString() : '—'}</td>
-                              <td className="p-4">
-                                <Badge className="bg-sky-100 text-sky-600">Purchased</Badge>
-                              </td>
-                            </tr>
-                          ))}
-                          {retiredCredits.map((c) => (
-                            <tr key={c._id} className="border-b hover:bg-muted/30 transition-colors">
-                              <td className="p-4">{c.ngoId?.organization?.name || c.ngoId?.name || 'Unknown'}</td>
-                              <td className="p-4 font-medium">{c.amount} tCarbon</td>
-                              <td className="p-4 text-sm text-muted-foreground">{(c as any).createdAt ? new Date((c as any).createdAt).toLocaleDateString() : '—'}</td>
-                              <td className="p-4">
-                                <Badge className="bg-emerald-100 text-emerald-600">Retired</Badge>
-                              </td>
-                            </tr>
-                          ))}
+                          {(() => {
+                            console.log("🔥 Digital Wallet Debug:");
+                            
+                            // Get transactions directly from user data or userData
+                            const userTransactions = (userData?.transactions || (user as any)?.transactions || []);
+                            const portfolioTransactions = [...portfolio.purchased, ...portfolio.retired];
+                            
+                            console.log("User transactions from userData:", userTransactions.length);
+                            console.log("Portfolio transactions:", portfolioTransactions.length);
+                            console.log("User transactions data:", userTransactions);
+                            
+                            // Use user transactions if available, otherwise use portfolio data
+                            const displayTransactions = userTransactions.length > 0 ? userTransactions : portfolioTransactions;
+                            
+                            if (displayTransactions.length === 0) {
+                              return (
+                                <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">
+                                  No transactions yet
+                                  <br />
+                                  <small className="text-xs text-gray-400">
+                                    User transactions: {userTransactions.length} | Portfolio transactions: {portfolioTransactions.length}
+                                  </small>
+                                </td></tr>
+                              );
+                            }
+                            
+                            return displayTransactions
+                              .sort((a: any, b: any) => {
+                                const dateA = new Date(a.timestamp || a.createdAt).getTime();
+                                const dateB = new Date(b.timestamp || b.createdAt).getTime();
+                                return dateB - dateA; // Most recent first
+                              })
+                              .map((transaction: any, index: number) => {
+                                // Handle both user transaction format and portfolio format
+                                const isUserTransaction = transaction.quantity !== undefined;
+                                
+                                const amount = isUserTransaction ? transaction.quantity : transaction.amount;
+                                const price = isUserTransaction ? transaction.pricePerUnit : transaction.price;
+                                const date = isUserTransaction ? transaction.timestamp : transaction.createdAt;
+                                const status = isUserTransaction ? transaction.type : (portfolio.purchased.some(p => p._id === transaction._id) ? "PURCHASED" : "RETIRED");
+                                
+                                return (
+                                  <tr key={`transaction-${index}`} className="border-b hover:bg-muted/30 transition-colors">
+                                    <td className="p-4">
+                                      {isUserTransaction ? 
+                                        `Transaction #${index + 1}` : 
+                                        (transaction.ngoId?.organization?.name || transaction.ngoId?.name || 'Unknown NGO')
+                                      }
+                                    </td>
+                                    <td className="p-4 font-medium">{amount || 0} tCarbon</td>
+                                    <td className="p-4 text-sm text-muted-foreground">
+                                      {date ? new Date(date).toLocaleDateString() : '—'}
+                                    </td>
+                                    <td className="p-4">
+                                      {status === 'PURCHASED' ? (
+                                        <Badge className="bg-sky-100 text-sky-600 hover:bg-sky-200">Purchased</Badge>
+                                      ) : (
+                                        <Badge className="bg-emerald-100 text-emerald-600 hover:bg-emerald-200">Retired</Badge>
+                                      )}
+                                    </td>
+                                    <td className="p-4 text-sm font-medium text-muted-foreground">
+                                      {price ? `₹${price.toLocaleString()}` : '₹—'}
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -663,17 +1099,27 @@ export default function CorporatePortal() {
                     </Card>
                     
                     <Card className="bg-gradient-to-br from-sky-100 to-sky-50 border-sky-200/20">
-                      <CardContent className="p-4 space-y-2">
+                      <CardContent className="p-4 space-y-3">
                         <div className="flex justify-between text-md">
                           <span className="text-blue-600">Available:</span>
                           <span className="font-medium text-sky-600">{availableInWallet}</span>
                         </div>
                         <div className="flex justify-between text-md">
-                          <span className="text-blue-600">Total Earned:</span>
+                          <span className="text-blue-600">Total Purchased:</span>
                           <span className="font-medium text-sky-600">{totalPurchased}</span>
                         </div>
                         <div className="flex justify-between text-md">
-                          <span className="text-blue-600">Market Value:</span>
+                          <span className="text-blue-600">Total Retired:</span>
+                          <span className="font-medium text-emerald-600">{totalRetired}</span>
+                        </div>
+                        <div className="flex justify-between text-md">
+                          <span className="text-blue-600">Total Transactions:</span>
+                          <span className="font-medium text-purple-600">
+                            {(userData?.transactions?.length || (user as any)?.transactions?.length || portfolio.purchased.length + portfolio.retired.length)}
+                          </span>
+                        </div>
+                        <div className="border-t pt-2 flex justify-between text-md">
+                          <span className="text-blue-600">Portfolio Value:</span>
                           <span className="font-medium text-sky-600">₹{Math.round(totalPurchased * (credits[0]?.price || 1500))}</span>
                         </div>
                       </CardContent>
@@ -842,73 +1288,120 @@ export default function CorporatePortal() {
                 <div>
                   <h3 className="font-semibold text-xl mb-4 flex items-center gap-2">
                     <Clock className="w-5 h-5 text-blue-primary" />
-                    Purchased Credits
+                    Transaction History
                   </h3>
-                  {purchasedCredits.length === 0 && (
-                    <Card className="p-8 text-center">
-                      <p className="text-muted-foreground">No purchased credits yet.</p>
-                    </Card>
-                  )}
-                  <div className="grid gap-4">
-                    {purchasedCredits.map((credit) => (
-                      <Card key={credit._id} className="shadow-md border-0 bg-white/80 backdrop-blur-sm hover:shadow-lg transition-all duration-200">
-                        <CardContent className="p-6">
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <h4 className="font-semibold text-lg text-foreground">
-                                {credit.ngoId?.organization?.name || credit.ngoId?.name || "Unknown NGO"}
-                              </h4>
-                              <p className="text-muted-foreground">
-                                {credit.amount} tonnes Carbon • ₹{credit.price}/tonne
-                              </p>
-                              <Badge className="bg-sky-100 text-sky-600 mt-2">Active Investment</Badge>
-                            </div>
-                            <Button
-                              onClick={() => handleRetireCredits(credit)}
-                              variant="destructive"
-                              className="bg-red-500 hover:bg-red-600 text-white"
-                            >
-                              Retire Credits
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                  
+                  {(() => {
+                    // Get transactions directly from user data or userData  
+                    const userTransactions = (userData?.transactions || (user as any)?.transactions || []);
+                    const portfolioTransactions = [...portfolio.purchased, ...portfolio.retired];
+                    
+                    // Use user transactions if available, otherwise use portfolio data
+                    const displayTransactions = userTransactions.length > 0 ? userTransactions : portfolioTransactions;
+                    
+                    if (displayTransactions.length === 0) {
+                      return (
+                        <Card className="p-8 text-center">
+                          <p className="text-muted-foreground">No transaction history yet.</p>
+                        </Card>
+                      );
+                    }
+                    
+                    return (
+                      <div className="bg-white rounded-lg shadow-sm border">
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b bg-muted/50">
+                                <th className="text-left p-4 font-medium">Transaction</th>
+                                <th className="text-left p-4 font-medium">Credits</th>
+                                <th className="text-left p-4 font-medium">Price</th>
+                                <th className="text-left p-4 font-medium">Date</th>
+                                <th className="text-left p-4 font-medium">Status</th>
+                                <th className="text-left p-4 font-medium">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {displayTransactions
+                                .sort((a: any, b: any) => {
+                                  const dateA = new Date(a.timestamp || a.createdAt).getTime();
+                                  const dateB = new Date(b.timestamp || b.createdAt).getTime();
+                                  return dateB - dateA; // Most recent first
+                                })
+                                .map((transaction: any, index: number) => {
+                                  // Handle both user transaction format and portfolio format
+                                  const isUserTransaction = transaction.quantity !== undefined;
+                                  const amount = isUserTransaction ? transaction.quantity : transaction.amount;
+                                  const price = isUserTransaction ? transaction.pricePerUnit : transaction.price;
+                                  const date = isUserTransaction ? transaction.timestamp : transaction.createdAt;
+                                  const status = isUserTransaction ? transaction.type : (portfolio.purchased.some(p => p._id === transaction._id) ? "PURCHASED" : "RETIRED");
+                                  const canRetire = status === "PURCHASED";
+                                  
+                                  return (
+                                    <tr key={`portfolio-transaction-${index}`} className="border-b hover:bg-muted/30 transition-colors">
+                                      <td className="p-4">
+                                        {isUserTransaction ? 
+                                          `Transaction #${index + 1}` : 
+                                          (transaction.ngoId?.organization?.name || transaction.ngoId?.name || 'Unknown NGO')
+                                        }
+                                      </td>
+                                      <td className="p-4 font-medium">{amount || 0} tCarbon</td>
+                                      <td className="p-4 text-sm">
+                                        {price ? `₹${price.toLocaleString()}` : '₹—'}
+                                      </td>
+                                      <td className="p-4 text-sm text-muted-foreground">
+                                        {date ? new Date(date).toLocaleDateString() : '—'}
+                                      </td>
+                                      <td className="p-4">
+                                        {status === 'PURCHASED' ? (
+                                          <Badge className="bg-sky-100 text-sky-600 hover:bg-sky-200">Active</Badge>
+                                        ) : (
+                                          <Badge className="bg-emerald-100 text-emerald-600 hover:bg-emerald-200">Retired</Badge>
+                                        )}
+                                      </td>
+                                      <td className="p-4">
+                                        {canRetire && (
+                                          <Button
+                                            onClick={() => handleRetireCredits(transaction)}
+                                            variant="destructive"
+                                            size="sm"
+                                            className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1"
+                                          >
+                                            Retire
+                                          </Button>
+                                        )}
+                                        {!canRetire && (
+                                          <span className="text-xs text-emerald-600 font-medium">✓ Offset Complete</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                <div>
-                  <h3 className="font-semibold text-xl mb-4 flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-emerald-primary" />
-                    Retired Credits
-                  </h3>
-                  {retiredCredits.length === 0 && (
-                    <Card className="p-8 text-center">
-                      <p className="text-muted-foreground">No retired credits yet.</p>
-                    </Card>
-                  )}
-                  <div className="grid gap-4">
-                    {retiredCredits.map((credit) => (
-                      <Card key={credit._id} className="shadow-md border-0 bg-white/80 backdrop-blur-sm">
-                        <CardContent className="p-6">
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <h4 className="font-semibold text-lg text-foreground">
-                                {credit.ngoId?.organization?.name || credit.ngoId?.name || "Unknown NGO"}
-                              </h4>
-                              <p className="text-muted-foreground">
-                                {credit.amount} tonnes Carbon • ₹{credit.price}/tonne
-                              </p>
-                              <Badge className="bg-emerald-100 text-emerald-600 mt-2">Carbon Offset Complete</Badge>
-                            </div>
-                            <div className="text-emerald-primary">
-                              <CheckCircle className="w-8 h-8" />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                {/* Keep only summary stats - remove duplicate sections */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                  <Card className="bg-gradient-to-br from-sky-50 to-sky-100 border-sky-200">
+                    <CardContent className="p-6 text-center">
+                      <div className="text-lg text-sky-600 font-medium mb-2">Active Investments</div>
+                      <div className="text-3xl font-bold text-sky-600 mb-2">{totalPurchased}</div>
+                      <div className="text-sm text-sky-600">Credits Purchased</div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200">
+                    <CardContent className="p-6 text-center">
+                      <div className="text-lg text-emerald-600 font-medium mb-2">Carbon Offset</div>
+                      <div className="text-3xl font-bold text-emerald-600 mb-2">{totalRetired}</div>
+                      <div className="text-sm text-emerald-600">Credits Retired</div>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
             </div>
@@ -981,55 +1474,144 @@ export default function CorporatePortal() {
                 </CardContent>
               </Card>
 
-              {user ? (
+              {user || userData ? (
                 <>
                   {/* Basic Information */}
                   <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
                     <CardHeader>
                       <CardTitle className="text-xl font-semibold text-foreground">Company Information</CardTitle>
+                      <CardDescription>
+                        {userData ? "Complete data loaded from server" : "Basic information from auth context"}
+                        {userData?.updatedAt && (
+                          <span className="block text-xs text-muted-foreground mt-1">
+                            Last updated: {new Date(userData.updatedAt).toLocaleString()}
+                          </span>
+                        )}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="p-8">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-6">
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Company Name</label>
-                            <p className="text-lg font-semibold text-foreground uppercase mt-1">{(user as any)?.name ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground uppercase mt-1">
+                              {userData?.name || (user as any)?.name || '—'}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Email Address</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.email ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.email || (user as any)?.email || '—'}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Organization</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.organization?.name ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.organization?.name || (user as any)?.organization?.name || '—'}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Business Type</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.organization?.type ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.organization?.type || (user as any)?.organization?.type || 'CORPORATE'}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">KYC Status</label>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant={
+                                (userData?.kycStatus || (user as any)?.kycStatus) === 'VERIFIED' ? 'default' : 
+                                (userData?.kycStatus || (user as any)?.kycStatus) === 'PENDING' ? 'secondary' : 
+                                'destructive'
+                              }>
+                                {userData?.kycStatus || (user as any)?.kycStatus || 'NOT_VERIFIED'}
+                              </Badge>
+                            </div>
                           </div>
                         </div>
                         <div className="space-y-6">
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Registration Number</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.registrationNumber ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.registrationNumber || (user as any)?.registrationNumber || '—'}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">PAN Number</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.panNumber ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.panNumber || (user as any)?.panNumber || '—'}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.phoneNumber ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.phoneNumber || userData?.organization?.phone || (user as any)?.phoneNumber || '—'}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">Website</label>
                             <p className="text-lg font-semibold text-foreground mt-1">
-                              {(user as any)?.website ? (
-                                <a href={(user as any).website} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
-                                  {(user as any).website}
+                              {(userData?.website || userData?.organization?.website || (user as any)?.website) ? (
+                                <a 
+                                  href={userData?.website || userData?.organization?.website || (user as any)?.website} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-emerald-600 hover:underline"
+                                >
+                                  {userData?.website || userData?.organization?.website || (user as any)?.website}
                                 </a>
                               ) : '—'}
                             </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">Member Since</label>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {(userData?.createdAt || (user as any)?.createdAt) ? 
+                                new Date(userData?.createdAt || (user as any)?.createdAt).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                }) : '—'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Blockchain & Wallet Information */}
+                      <div className="border-t pt-8 mt-8">
+                        <h3 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
+                          <Wallet className="w-5 h-5" />
+                          Blockchain & Wallet Details
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          <div className="space-y-6">
+                            <div>
+                              <label className="text-sm font-medium text-muted-foreground">Credit Balance</label>
+                              <p className="text-lg font-semibold text-emerald-600 mt-1">
+                                {userData?.credits?.balance || (user as any)?.credits?.balance || 0} Credits
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-muted-foreground">Wallet Address</label>
+                              <p className="text-sm font-mono text-foreground mt-1 break-all bg-gray-100 p-2 rounded">
+                                {userData?.credits?.walletAddress || (user as any)?.credits?.walletAddress || '—'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="space-y-6">
+                            <div>
+                              <label className="text-sm font-medium text-muted-foreground">Total Transactions</label>
+                              <p className="text-lg font-semibold text-blue-600 mt-1">
+                                {userData?.transactions?.length || (user as any)?.transactions?.length || 0}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-muted-foreground">Last Credit Update</label>
+                              <p className="text-sm text-foreground mt-1">
+                                {(userData?.credits?.lastUpdated || (user as any)?.credits?.lastUpdated) ? 
+                                  new Date(userData?.credits?.lastUpdated || (user as any)?.credits?.lastUpdated).toLocaleString() : '—'}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1045,20 +1627,28 @@ export default function CorporatePortal() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Complete Address</label>
-                          <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.organization?.address ?? '—'}</p>
+                          <p className="text-lg font-semibold text-foreground mt-1">
+                            {userData?.organization?.address || (user as any)?.organization?.address || '—'}
+                          </p>
                         </div>
                         <div className="space-y-4">
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">City</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.city ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.city || (user as any)?.city || '—'}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">State</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.state ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.state || (user as any)?.state || '—'}
+                            </p>
                           </div>
                           <div>
                             <label className="text-sm font-medium text-muted-foreground">PIN Code</label>
-                            <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.pincode ?? '—'}</p>
+                            <p className="text-lg font-semibold text-foreground mt-1">
+                              {userData?.pincode || (user as any)?.pincode || '—'}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -1066,7 +1656,7 @@ export default function CorporatePortal() {
                   </Card>
 
                   {/* Business Information */}
-                  {(user as any)?.kycStatus === 'verified' && (
+                  {(userData?.kycStatus === 'VERIFIED' || (user as any)?.kycStatus === 'VERIFIED') && (
                     <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
                       <CardHeader>
                         <CardTitle className="text-xl font-semibold text-foreground">Business Information</CardTitle>
@@ -1076,27 +1666,32 @@ export default function CorporatePortal() {
                           <div className="space-y-6">
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">Employee Count</label>
-                              <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.employeeCount ?? '—'}</p>
+                              <p className="text-lg font-semibold text-foreground mt-1">
+                                {userData?.organization?.employeeCount || (user as any)?.employeeCount || '—'}
+                              </p>
                             </div>
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">Incorporation Date</label>
                               <p className="text-lg font-semibold text-foreground mt-1">
-                                {(user as any)?.incorporationDate ? new Date((user as any).incorporationDate).toLocaleDateString() : '—'}
+                                {(userData?.organization?.incorporationDate || (user as any)?.incorporationDate) ? 
+                                  new Date(userData?.organization?.incorporationDate || (user as any)?.incorporationDate).toLocaleDateString() : '—'}
                               </p>
                             </div>
                           </div>
                           <div className="space-y-6">
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">Tax ID/GST</label>
-                              <p className="text-lg font-semibold text-foreground mt-1">{(user as any)?.taxId ?? '—'}</p>
+                              <p className="text-lg font-semibold text-foreground mt-1">
+                                {userData?.taxId || (user as any)?.taxId || '—'}
+                              </p>
                             </div>
                             <div>
                               <label className="text-sm font-medium text-muted-foreground">Contact Person</label>
                               <p className="text-lg font-semibold text-foreground mt-1">
-                                {(user as any)?.contactPersonName ?? '—'}
-                                {(user as any)?.contactPersonDesignation && (
+                                {userData?.contactPersonName || (user as any)?.contactPersonName || '—'}
+                                {(userData?.contactPersonDesignation || (user as any)?.contactPersonDesignation) && (
                                   <span className="text-sm text-muted-foreground block">
-                                    {(user as any).contactPersonDesignation}
+                                    {userData?.contactPersonDesignation || (user as any)?.contactPersonDesignation}
                                   </span>
                                 )}
                               </p>
@@ -1104,17 +1699,49 @@ export default function CorporatePortal() {
                           </div>
                         </div>
                         
-                        {(user as any)?.businessDescription && (
+                        {(userData?.organization?.businessDescription || (user as any)?.businessDescription) && (
                           <div className="mt-8 pt-6 border-t">
                             <label className="text-sm font-medium text-muted-foreground">Business Description</label>
                             <p className="text-base text-foreground mt-2 leading-relaxed">
-                              {(user as any).businessDescription}
+                              {userData?.organization?.businessDescription || (user as any)?.businessDescription}
                             </p>
                           </div>
                         )}
                       </CardContent>
                     </Card>
                   )}
+
+                  {/* Portfolio Summary */}
+                  <Card className="shadow-lg border-0 bg-gradient-to-br from-emerald-50 to-blue-50">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-semibold text-foreground">Portfolio Summary</CardTitle>
+                      <CardDescription>
+                        Your complete carbon credit transaction history
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-8">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-emerald-600 mb-1">{totalPurchased}</div>
+                          <p className="text-sm text-muted-foreground">Credits Purchased</p>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-blue-600 mb-1">{totalRetired}</div>
+                          <p className="text-sm text-muted-foreground">Credits Retired</p>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-purple-600 mb-1">{availableInWallet}</div>
+                          <p className="text-sm text-muted-foreground">Available Credits</p>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-orange-600 mb-1">
+                            ₹{portfolio.totalSpent || (totalPurchased * 15)}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Total Invested</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </>
               ) : (
                 <Card className="p-8 text-center">

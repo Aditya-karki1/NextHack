@@ -70,53 +70,133 @@ export default function MRVReportModal({ open, onOpenChange, projectId, ngoRegis
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-white text-slate-900 rounded-lg shadow-lg p-6">
-        <DialogHeader>
-          <DialogTitle>Submit MRV Report</DialogTitle>
-          <DialogDescription>Provide MRV details for the selected project. Project ID is auto-filled.</DialogDescription>
-        </DialogHeader>
+    <>
+      {/* Custom overlay backdrop */}
+      {open && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+          onClick={() => onOpenChange(false)}
+        />
+      )}
+      
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border-0 bg-white p-0 shadow-2xl duration-200 rounded-xl">
+          <div className="bg-white rounded-xl p-6 max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold text-gray-900">Submit MRV Report</DialogTitle>
+              <DialogDescription className="text-gray-600">Upload verification data and images for project monitoring</DialogDescription>
+            </DialogHeader>
 
-        <form className="grid gap-3 py-2" onSubmit={(e) => handleSubmit(e)}>
-          <div>
-            <Label>Project ID</Label>
-            <Input value={projectId ?? ''} readOnly />
-          </div>
+            <form className="grid gap-4 py-2" onSubmit={(e) => handleSubmit(e)}>
+              <div className="grid gap-2">
+                <Label className="text-sm font-medium text-gray-700">Project ID</Label>
+                <Input 
+                  value={projectId ?? ''} 
+                  readOnly 
+                  className="bg-gray-50 border-gray-200 text-gray-600"
+                />
+              </div>
 
-          <div>
-            <Label>Date Reported</Label>
-            <Input type="date" value={dateReported} onChange={(e) => setDateReported(e.target.value)} />
-          </div>
+              <div className="grid gap-2">
+                <Label className="text-sm font-medium text-gray-700">Date Reported</Label>
+                <Input 
+                  type="date" 
+                  value={dateReported} 
+                  onChange={(e) => setDateReported(e.target.value)}
+                  className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+                />
+              </div>
 
-          <div>
-            <Label>Tree Count</Label>
-            <Input type="number" value={treeCount === '' ? '' : String(treeCount)} onChange={(e) => setTreeCount(e.target.value === '' ? '' : Number(e.target.value))} />
-          </div>
+              <div className="grid gap-2">
+                <Label className="text-sm font-medium text-gray-700">Trees Planted</Label>
+                <Input 
+                  type="number" 
+                  placeholder="e.g. 150"
+                  value={treeCount === '' ? '' : String(treeCount)} 
+                  onChange={(e) => setTreeCount(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+                />
+              </div>
 
-          <div>
-            <Label>Drone Images</Label>
-            <Input type="file" multiple accept="image/*" onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
-          </div>
+              <div className="grid gap-2">
+                <Label className="text-sm font-medium text-gray-700">Carbon Sequestered (CO₂)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="e.g. 12.5"
+                  className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+                />
+              </div>
 
-          <div>
-            <Label>Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as any)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="completed">completed</SelectItem>
-                <SelectItem value="incompleted">incompleted</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="grid gap-2">
+                <Label className="text-sm font-medium text-gray-700">Upload Images</Label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-emerald-400 transition-colors">
+                  <div className="space-y-2">
+                    <div className="mx-auto h-12 w-12 text-gray-400 text-2xl">
+                      📷
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <label htmlFor="file-upload" className="relative cursor-pointer rounded-md font-medium text-emerald-600 hover:text-emerald-500">
+                        Choose Images
+                        <Input 
+                          id="file-upload"
+                          type="file" 
+                          multiple 
+                          accept="image/*" 
+                          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                          className="sr-only"
+                        />
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500">Upload photos of planted trees and project progress</p>
+                    {files.length > 0 && (
+                      <p className="text-sm text-emerald-600 font-medium">{files.length} file(s) selected</p>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700" disabled={submitting}>{submitting ? 'Submitting...' : 'Submit Report'}</Button>
+              <div className="grid gap-2">
+                <Label className="text-sm font-medium text-gray-700">Additional Notes</Label>
+                <textarea
+                  placeholder="Any additional observations or notes about the project..."
+                  className="min-h-[80px] w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label className="text-sm font-medium text-gray-700">Status</Label>
+                <Select value={status} onValueChange={(v) => setStatus(v as any)}>
+                  <SelectTrigger className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="incompleted">In Progress</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => onOpenChange(false)}
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm" 
+                  disabled={submitting}
+                >
+                  {submitting ? 'Submitting...' : 'Submit Report'}
+                </Button>
+              </div>
+            </form>
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -9,9 +9,10 @@ interface CompanyVerificationProps {
   user: any;
   onBack: () => void;
   onVerificationSubmitted: () => void;
+  onSubmitVerification?: (data: any) => Promise<void>;
 }
 
-export default function CompanyVerification({ user, onBack, onVerificationSubmitted }: CompanyVerificationProps) {
+export default function CompanyVerification({ user, onBack, onVerificationSubmitted, onSubmitVerification }: CompanyVerificationProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -72,12 +73,42 @@ export default function CompanyVerification({ user, onBack, onVerificationSubmit
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulate immediate verification without API call
     try {
-      // Just call the verification callback immediately
+      const verificationData = {
+        organizationName: formData.companyName,
+        organizationType: formData.businessType,
+        address: formData.address,
+        phone: formData.phoneNumber,
+        registrationNumber: formData.registrationNumber,
+        panNumber: formData.panNumber,
+        taxId: formData.taxId,
+        contactPersonName: formData.contactPersonName,
+        contactPersonDesignation: formData.contactPersonDesignation,
+        website: formData.website,
+        businessDescription: formData.businessDescription,
+        employeeCount: formData.employeeCount,
+        incorporationDate: formData.incorporationDate,
+      };
+
+      if (onSubmitVerification) {
+        await onSubmitVerification(verificationData);
+      }
+      
       onVerificationSubmitted();
+      
+      toast({
+        title: "Verification Submitted Successfully! ✅",
+        description: "Your company details have been submitted for verification.",
+        variant: "success",
+      });
+
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error submitting verification:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit verification. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }

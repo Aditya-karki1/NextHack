@@ -45,8 +45,20 @@ export default function NGODashboard() {
   const { user } = useAuth();
   const currentUserId: string | null = user?.id ?? null;
   const navigate = useNavigate();
-  // ngoDisplayName will be derived from state (ngoName)
-  const [availableCredits, setAvailableCredits] = useState<number>(375);
+  
+  // Dashboard stats from backend
+  const [dashboardStats, setDashboardStats] = useState({
+    totalProjects: 0,
+    completedProjects: 0, 
+    activeProjects: 1,
+    totalCreditsEarned: 0,
+    availableCredits: 30,
+    kycStatus: 'PENDING'
+  });
+  
+  // Legacy states (will be replaced with real data)
+  const [loading, setLoading] = useState<boolean>(true);
+  const [dataFetching, setDataFetching] = useState<boolean>(false);
   
   // Modal states
   const [verifyOpen, setVerifyOpen] = useState(false);
@@ -82,9 +94,89 @@ export default function NGODashboard() {
     navigate('/subscription');
   };
   
+  // Comprehensive NGO dashboard data fetching
+  const fetchDashboardData = async () => {
+    if (!currentUserId) return;
+    
+    setDataFetching(true);
+    try {
+      console.log("🔄 Fetching NGO dashboard data for ID:", currentUserId);
+      
+      // Fetch dashboard stats
+      const dashboardRes = await axios.get(
+        `http://localhost:4000/api/v1/ngo/dashboard/${currentUserId}`,
+        { withCredentials: true }
+      );
+      
+      if (dashboardRes.data.success) {
+        const { stats, profile, recentMRVRecords } = dashboardRes.data.data;
+        
+        setDashboardStats({
+          totalProjects: stats.totalProjects || 0,
+          completedProjects: stats.completedProjects || 0,
+          activeProjects: stats.activeProjects || 1,
+          totalCreditsEarned: stats.totalCreditsEarned || 0,
+          availableCredits: stats.availableCredits || 30,
+          kycStatus: stats.kycStatus || 'PENDING'
+        });
+        
+        setNgoDetails(profile);
+        setIsVerified(stats.kycStatus === 'VERIFIED');
+        
+        console.log("✅ Dashboard stats loaded:", stats);
+        
+        // Set recent MRV records
+        if (recentMRVRecords && recentMRVRecords.length > 0) {
+          setMrvReports(recentMRVRecords);
+        }
+      }
+      
+      // Fetch projects
+      const projectsRes = await axios.get(
+        `http://localhost:4000/api/v1/ngo/projects/${currentUserId}`,
+        { withCredentials: true }
+      );
+      
+      if (projectsRes.data.success) {
+        const projects = projectsRes.data.projects || [];
+        setAllProjects(projects);
+        console.log("✅ Projects loaded:", projects.length);
+      }
+      
+      // Fetch MRV reports
+      const mrvRes = await axios.get(
+        `http://localhost:4000/api/v1/ngo/mrv-reports/${currentUserId}`,
+        { withCredentials: true }
+      );
+      
+      if (mrvRes.data.success) {
+        const reports = mrvRes.data.reports || [];
+        setMrvReports(reports);
+        console.log("✅ MRV reports loaded:", reports.length);
+      }
+      
+      toast({
+        title: "Dashboard Updated",
+        description: "Your NGO data has been refreshed successfully.",
+        variant: "success",
+      });
+      
+    } catch (error: any) {
+      console.error("❌ Error fetching dashboard data:", error);
+      toast({
+        title: "Data Loading Error",
+        description: error.response?.data?.message || "Failed to load dashboard data",
+        variant: "destructive",
+      });
+    } finally {
+      setDataFetching(false);
+      setLoading(false);
+    }
+  };
+  
   // mockTasks removed; data is fetched from backend
 
-  // Fetch data from backend: projects list, NGO profile, and available credits
+  // Fetch data from backend: projects list, NGO profile, and available credits (legacy)
   const fetchAll = async () => {
     try {
   // Fetch all projects (marketplace)
@@ -154,14 +246,6 @@ export default function NGODashboard() {
           console.debug('Failed to fetch NGO profile', err);
         }
 
-        // Fetch credit balance
-        try {
-          const balRes = await axios.get(`http://localhost:4000/api/v1/ngo/credits-test/${currentUserId}`);
-          if (balRes?.data?.success) setAvailableCredits(balRes.data.balance || availableCredits);
-        } catch (err) {
-          console.debug('Failed to fetch credits balance', err);
-        }
-
         // Fetch MRV reports submitted by this NGO
         try {
           const mrvRes = await axios.get(`http://localhost:4000/api/v1/mrv/user/${currentUserId}`, { withCredentials: true });
@@ -177,9 +261,14 @@ export default function NGODashboard() {
   };
 
   useEffect(() => {
-    // run initial fetch
+    // Use new comprehensive dashboard data fetching
+    if (currentUserId) {
+      fetchDashboardData();
+    }
+    
+    // Fallback: run legacy fetch for projects marketplace
     fetchAll();
-  }, []);
+  }, [currentUserId]);
 
   // Read recentSubscribed flag (set by subscription page) so we can show immediate feedback
   useEffect(() => {
@@ -209,11 +298,12 @@ export default function NGODashboard() {
     }
   }, [ngoDetails, recentSubscribed]);
 
-  const completedProjects = myTasks.filter(t => t.status === 'Completed').length;
-  const activeProjects = myTasks.filter(t => t.status === 'InProgress').length;
-  const totalCreditsEarned = myTasks
-    .filter(t => t.status === 'Completed')
-    .reduce((sum, task) => sum + (task.carbonCredits || 0), 0);
+  // Legacy calculations (now replaced with backend data)
+  // const completedProjects = myTasks.filter(t => t.status === 'Completed').length;
+  // const activeProjects = myTasks.filter(t => t.status === 'InProgress').length;
+  // const totalCreditsEarned = myTasks
+  //   .filter(t => t.status === 'Completed')
+  //   .reduce((sum, task) => sum + (task.carbonCredits || 0), 0);
 
   const clearError = (field: string) => setErrors(prev => {
     const copy = { ...prev };
@@ -538,7 +628,7 @@ export default function NGODashboard() {
       return;
     }
 
-    if (sellAmount <= 0 || sellAmount > availableCredits) {
+    if (sellAmount <= 0 || sellAmount > dashboardStats.availableCredits) {
       toast({ 
         title: 'Invalid Amount', 
         description: 'Please enter a valid amount within your available credits.',
@@ -577,7 +667,10 @@ export default function NGODashboard() {
           });
           
           // Update available credits locally
-          setAvailableCredits(prev => prev - sellAmount);
+          setDashboardStats(prev => ({
+            ...prev,
+            availableCredits: prev.availableCredits - sellAmount
+          }));
           
           // Reset form
           setSellAmount(0);
@@ -707,38 +800,51 @@ export default function NGODashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Completed Projects"
-          value={completedProjects}
+          value={dashboardStats.completedProjects}
           icon={CheckCircle}
           variant="success"
           trend={{ value: 25, isPositive: true }}
         />
         <StatCard
           title="Active Projects"
-          value={activeProjects}
+          value={dashboardStats.activeProjects}
           icon={Clock}
           variant="info"
           trend={{ value: 12, isPositive: true }}
         />
         <StatCard
           title="Credits Earned"
-          value={totalCreditsEarned}
+          value={dashboardStats.totalCreditsEarned}
           icon={Coins}
           variant="purple"
           trend={{ value: 8, isPositive: true }}
         />
         <StatCard
           title="Available Credits"
-          value={availableCredits}
+          value={dashboardStats.availableCredits}
           icon={Wallet}
           variant="warning"
           trend={{ value: 15, isPositive: true }}
         />
       </div>
 
+      {/* Add refresh button */}
+      <div className="flex justify-end mb-4">
+        <Button 
+          onClick={fetchDashboardData} 
+          variant="outline" 
+          size="sm"
+          disabled={dataFetching}
+          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
+        >
+          {dataFetching ? "Loading..." : "🔄 Refresh Dashboard"}
+        </Button>
+      </div>
+
       {/* Analytics Charts */}
       <AnalyticsCharts
-        totalCredits={totalCreditsEarned}
-        availableCredits={availableCredits}
+        totalCredits={dashboardStats.totalCreditsEarned}
+        availableCredits={dashboardStats.availableCredits}
         myTasks={myTasks}
         availableTasks={availableTasks}
       />
@@ -1097,7 +1203,7 @@ export default function NGODashboard() {
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground">Total Balance</p>
-              <p className="text-3xl font-bold text-success">{availableCredits} Credits</p>
+              <p className="text-3xl font-bold text-success">{dashboardStats.availableCredits} Credits</p>
             </div>
           </div>
 
@@ -1147,15 +1253,15 @@ export default function NGODashboard() {
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span>Available:</span>
-                  <span className="font-bold">{availableCredits}</span>
+                  <span className="font-bold">{dashboardStats.availableCredits}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Total Earned:</span>
-                  <span className="font-bold">{totalCreditsEarned}</span>
+                  <span className="font-bold">{dashboardStats.totalCreditsEarned}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Market Value:</span>
-                  <span className="font-bold">₹{(availableCredits * 15).toLocaleString()}</span>
+                  <span className="font-bold">₹{(dashboardStats.availableCredits * 15).toLocaleString()}</span>
                 </div>
                 <Button variant="outline" className="w-full bg-white/20 border-white/30 text-white hover:bg-white/30">
                   View Market Rates
@@ -1177,7 +1283,7 @@ export default function NGODashboard() {
               <CardHeader>
                 <CardTitle>List Credits for Sale</CardTitle>
                 <CardDescription>
-                  You have <span className="font-bold text-success">{availableCredits}</span> credits available
+                  You have <span className="font-bold text-success">{dashboardStats.availableCredits}</span> credits available
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -1188,7 +1294,7 @@ export default function NGODashboard() {
                     value={sellAmount}
                     onChange={(e) => setSellAmount(Number(e.target.value))}
                     min={1}
-                    max={availableCredits}
+                    max={dashboardStats.availableCredits}
                     placeholder="Enter amount"
                   />
                 </div>
@@ -1213,7 +1319,7 @@ export default function NGODashboard() {
                 </div>
                 
                 <Button
-                  disabled={selling || sellAmount <= 0 || sellAmount > availableCredits}
+                  disabled={selling || sellAmount <= 0 || sellAmount > dashboardStats.availableCredits}
                   onClick={handleSellCredits}
                   variant="default"
                   size="lg"
@@ -1593,7 +1699,7 @@ export default function NGODashboard() {
                   <div className="w-16 h-16 bg-teal-500 rounded-full flex items-center justify-center mx-auto mb-3">
                     <CheckCircle className="w-8 h-8 text-white" />
                   </div>
-                  <p className="text-2xl font-bold text-teal-700">{completedProjects + 13}</p>
+                  <p className="text-2xl font-bold text-teal-700">{dashboardStats.completedProjects + 13}</p>
                   <p className="text-sm text-muted-foreground">Projects Completed</p>
                 </div>
                 <div className="text-center">
@@ -1607,7 +1713,7 @@ export default function NGODashboard() {
                   <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Coins className="w-8 h-8 text-white" />
                   </div>
-                  <p className="text-2xl font-bold text-blue-700">{totalCreditsEarned + 1875}</p>
+                  <p className="text-2xl font-bold text-blue-700">{dashboardStats.totalCreditsEarned + 1875}</p>
                   <p className="text-sm text-muted-foreground">Credits Earned</p>
                 </div>
                 <div className="text-center">
