@@ -1,6 +1,7 @@
 // pages/NgoDetail.tsx
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from '@/hooks/use-toast';
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ export default function NgoDetail() {
   const [ngo, setNgo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchNgo = async () => {
@@ -51,9 +53,11 @@ export default function NgoDetail() {
           <p><strong>Name:</strong> {ngo.name}</p>
           <p><strong>Email:</strong> {ngo.email}</p>
           <p><strong>KYC Status:</strong> {ngo.kycStatus}</p>
-          <Button onClick={handleVerify} className="mt-2 bg-green-600 hover:bg-green-700">
-            Verify KYC
-          </Button>
+          {user?.role === 'GOV' && (
+            <Button onClick={handleVerify} className="mt-2 bg-green-600 hover:bg-green-700">
+              Verify KYC
+            </Button>
+          )}
         </CardContent>
       </Card>
 

@@ -62,10 +62,7 @@ const login = async (role: UserRole, credentials: { email: string; password: str
         : role === "NGO"
         ? "http://localhost:4000/api/v1/ngo/login"
         : "http://localhost:4000/api/v1/company/login";
- console.log("check");
- console.log(endpoint );
     const res = await axios.post(endpoint, credentials, { withCredentials: true });
-    console.log(res.data);
     setUser(res.data.userObj);
 
     return true; // Now TypeScript is happy

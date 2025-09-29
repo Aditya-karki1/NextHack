@@ -9,51 +9,53 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Modern Eco-Tech palette */
+    --background: 245 20% 98%; /* warm grey-ish */
+    --foreground: 210 10% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 210 10% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 210 10% 10%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary deep forest/teal */
+    --primary: 170 50% 22%; /* approx teal/forest */
+    --primary-foreground: 200 25% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 210 60% 92%; /* muted blue background */
+    --secondary-foreground: 210 40% 16%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 10% 94%;
+    --muted-foreground: 210 12% 36%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 45 100% 50%; /* amber/gold for accents */
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 80% 50%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 220 12% 92%;
+    --input: 220 12% 92%;
+    --ring: 170 45% 30%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 180 18% 96%; /* subtle teal-tinted background */
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-foreground: 200 14% 14%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary: 170 50% 22%;
 
     --sidebar-primary-foreground: 0 0% 98%;
 
-    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent: 210 60% 96%;
 
-    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-accent-foreground: 210 12% 36%;
 
-    --sidebar-border: 220 13% 91%;
+    --sidebar-border: 200 10% 90%;
 
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-ring: 170 45% 30%;
   }
 
   .dark {
@@ -219,4 +221,136 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Sidebar helpers */
+@layer components {
+  .sidebar-indicator::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 60%;
+    border-radius: 4px;
+    background: hsl(var(--sidebar-primary));
+    opacity: 0.0;
+    transition: opacity 150ms ease-in-out, transform 150ms ease-in-out;
+  }
+  .sidebar-item-hover:hover { transform: translateX(4px); }
+  .sidebar-active .sidebar-indicator::before { opacity: 1.0; transform: translateY(-50%) scaleY(1); }
+}
+
+/* App-specific sidebar tweaks for better visibility */
+@layer components {
+  .app-sidebar {
+    background: hsl(var(--color-sidebar));
+    color: hsl(var(--color-sidebar-foreground));
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  }
+
+  .app-sidebar nav a {
+    color: hsl(var(--color-sidebar-foreground));
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .6rem .9rem;
+    border-radius: .6rem;
+    transition: background 160ms ease, transform 160ms ease, color 160ms ease;
+  }
+
+  .app-sidebar nav a:hover {
+    background: linear-gradient(90deg, hsla(var(--color-sidebar-accent) / .9), hsla(var(--color-sidebar) / .98));
+    color: hsl(var(--color-sidebar-accent-foreground));
+    transform: translateX(6px) scale(1.01);
+    box-shadow: 0 6px 18px rgba(5, 80, 60, 0.04);
+  }
+
+  .app-sidebar nav a .w-8 { /* icon wrapper */
+    color: hsl(var(--color-sidebar-foreground));
+  }
+
+  .app-sidebar nav a.sidebar-active {
+    background: hsl(var(--color-sidebar-primary));
+    color: hsl(var(--color-sidebar-primary-foreground));
+    box-shadow: 0 6px 18px rgba(2, 48, 36, 0.08);
+    transform: none;
+  }
+
+  /* icon and label animations */
+  .app-sidebar nav a .icon { transition: transform 180ms ease, color 160ms ease; }
+  .app-sidebar nav a .label { color: hsl(var(--color-sidebar-foreground)); }
+  .app-sidebar nav a:hover .icon { transform: scale(1.12) translateX(2px); color: hsl(var(--color-sidebar-accent-foreground)); }
+  .app-sidebar nav a:hover .label { color: hsl(var(--color-sidebar-accent-foreground)); }
+  .app-sidebar nav a.sidebar-active .icon { transform: scale(1.12); color: hsl(var(--color-sidebar-primary-foreground)); }
+  .app-sidebar nav a.sidebar-active .label { color: hsl(var(--color-sidebar-primary-foreground)); font-weight: 600; }
+
+  .app-sidebar .text-lg { font-size: 1.05rem; }
+  .app-sidebar .text-base { font-size: 0.98rem; }
+}
+
+/* NGO Portal horizontal nav (the 'white area') */
+.ngop-nav {
+  background: hsl(var(--color-card) / 0.95);
+  backdrop-filter: blur(6px);
+  padding: 0.45rem;
+  border-radius: 0.6rem;
+  gap: 0.25rem;
+  align-items: center;
+}
+.ngop-trigger {
+  background: transparent;
+  color: hsl(var(--color-muted-foreground));
+  font-weight: 600;
+  font-family: Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  border-radius: 0.5rem;
+  transition: transform 180ms ease, background 180ms ease, color 180ms ease, box-shadow 180ms ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.ngop-trigger:hover {
+  transform: translateY(-4px) scale(1.01);
+  color: hsl(var(--color-primary-foreground));
+  background: linear-gradient(90deg, hsl(var(--color-primary) / 0.12), hsl(var(--color-card) / 0.6));
+  box-shadow: 0 8px 22px rgba(2, 48, 36, 0.06);
+}
+.ngop-trigger[data-state='active'] {
+  background: linear-gradient(90deg, hsl(var(--color-primary) / 1), hsl(var(--color-primary) / 0.9));
+  color: hsl(var(--color-primary-foreground));
+  transform: none;
+  box-shadow: 0 10px 30px rgba(2, 48, 36, 0.12);
+}
+
+/* smaller screens: slightly compact spacing */
+@media (max-width: 768px) {
+  .ngop-nav { gap: 0.125rem; padding: 0.25rem; }
+  .ngop-trigger { font-size: 0.9rem; padding: 0.5rem 0.6rem; }
+}
+
+
+/* --- NEW: Refined Styles with a Cohesive Green/Teal Theme --- */
+
+.ngop-beautiful-nav {
+  @apply bg-white/70 backdrop-blur-md border border-gray-200/80 rounded-xl p-2 shadow-lg flex justify-around items-center space-x-2;
+  height: 60px; /* A more substantial height */
+}
+
+.ngop-beautiful-trigger {
+  @apply relative flex-1 text-center py-2 px-4 rounded-lg text-lg font-semibold text-gray-700 transition-all duration-300 ease-in-out cursor-pointer;
+}
+
+/* Hover animation for inactive tabs — now with a subtle green */
+.ngop-beautiful-trigger:not([data-state='active']):hover {
+  @apply bg-emerald-50 text-emerald-700 shadow-md;
+  transform: translateY(-2px); /* Gentle lift effect */
+}
+
+/* Style for the active tab — using a vibrant green gradient to match your UI */
+.ngop-beautiful-trigger[data-state='active'] {
+  @apply bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-xl;
+  font-size: 1.15rem; /* Slightly larger text for emphasis */
+  transform: scale(1.02); /* Pop out effect */
+  text-shadow: 0px 1px 3px rgba(0, 0, 0, 0.2);
 }

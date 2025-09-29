@@ -19,7 +19,14 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./context/ProtectedRoute";
 import NgoDetail from "./pages/NgoDetail";
 import ProjectReports from "./pages/ProjectReports";
+<<<<<<< HEAD
 import MRVReportDetail from "./pages/MRVReportDetail";
+||||||| fb06d59c
+
+=======
+import SubscriptionPage from "./pages/Subscription";
+import MRVReportDetail from "./pages/MRVReportDetail";
+>>>>>>> test
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -57,7 +64,9 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+                <Route path="/government/projects/:projectId/reports/:mrvId" element={<MRVReportDetail />} />
             <Route path="/government/projects/:projectId/reports" element={<ProjectReports />} />
+            <Route path="/subscription" element={<SubscriptionPage />} />
             
             <Route
               path="/corporate"

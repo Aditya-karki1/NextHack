@@ -14,6 +14,8 @@ const ngoSchema = new mongoose.Schema({
     walletAddress: { type: String },       // Optional: linked blockchain wallet
     lastUpdated: { type: Date, default: Date.now }
   },
+  // Number of project requests allowed (subscription quota)
+  requestCall: { type: Number, default: 0 },
 
   // Organization fields (embedded directly inside user)
   organization: {

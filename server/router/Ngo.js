@@ -6,6 +6,133 @@ const {signupNgo,loginNgo} = require("../controllers/Auth");
 const { verifyNgo } = require("../controllers/Verification");
 const razorpay = require("../config/razorpay");
 const CreditListing = require("../models/CreditListing");
+const { capturePayment, verifyPayment } = require('../controllers/PaymentController');
+const RestorationProject = require("../models/RestorationProject");
+const MRVRecord = require("../models/MRVRecord");
+
+// NGO Dashboard - Get profile and stats
+router.get("/dashboard/:ngoId", auth, async (req, res) => {
+  try {
+    const { ngoId } = req.params;
+    
+    const ngo = await Ngo.findById(ngoId).select('-password');
+    if (!ngo) {
+      return res.status(404).json({
+        success: false,
+        message: "NGO not found"
+      });
+    }
+
+    // Get project stats
+    const totalProjects = await RestorationProject.countDocuments({ ngoId });
+    const completedProjects = await RestorationProject.countDocuments({ ngoId, status: 'completed' });
+    const activeProjects = await RestorationProject.countDocuments({ ngoId, status: { $in: ['ongoing', 'active'] } });
+    
+    // Get MRV records for credits calculation
+    const mrvRecords = await MRVRecord.find({ userId: ngoId }).sort({ dateReported: -1 });
+    const totalCreditsEarned = mrvRecords.reduce((sum, record) => sum + (record.creditsGenerated || record.treeCount * 0.5), 0);
+    
+    // Get available credits from listings
+    const availableCredits = ngo.credits?.balance || 0;
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        profile: ngo,
+        stats: {
+          totalProjects,
+          completedProjects,
+          activeProjects,
+          totalCreditsEarned: Math.round(totalCreditsEarned),
+          availableCredits,
+          kycStatus: ngo.kycStatus || 'PENDING'
+        },
+        recentMRVRecords: mrvRecords.slice(0, 5)
+      }
+    });
+
+  } catch (error) {
+    console.error("NGO Dashboard Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard data",
+      error: error.message
+    });
+  }
+});
+
+// Get NGO projects
+router.get("/projects/:ngoId", auth, async (req, res) => {
+  try {
+    const { ngoId } = req.params;
+    
+    const projects = await RestorationProject.find({ ngoId })
+      .sort({ createdAt: -1 })
+      .populate('ngoId', 'name email');
+    
+    res.status(200).json({
+      success: true,
+      projects
+    });
+
+  } catch (error) {
+    console.error("NGO Projects Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch projects",
+      error: error.message
+    });
+  }
+});
+
+// Get NGO MRV records
+router.get("/mrv-reports/:ngoId", auth, async (req, res) => {
+  try {
+    const { ngoId } = req.params;
+    
+    const mrvRecords = await MRVRecord.find({ userId: ngoId })
+      .sort({ dateReported: -1 })
+      .populate('projectId', 'name location');
+    
+    res.status(200).json({
+      success: true,
+      reports: mrvRecords
+    });
+
+  } catch (error) {
+    console.error("NGO MRV Reports Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch MRV reports",
+      error: error.message
+    });
+  }
+});
+
+// Get NGO credit listings
+router.get("/credit-listings/:ngoId", auth, async (req, res) => {
+  try {
+    const { ngoId } = req.params;
+    
+    const listings = await CreditListing.find({ ngoId })
+      .sort({ createdAt: -1 })
+      .populate('ngoId', 'name email');
+    
+    res.status(200).json({
+      success: true,
+      listings
+    });
+
+  } catch (error) {
+    console.error("NGO Credit Listings Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch credit listings",
+      error: error.message
+    });
+  }
+});
+
 router.post("/verifyNgo", auth, isNgo, verifyNgo);
 
 router.post("/login", loginNgo);
@@ -75,6 +202,10 @@ console.log("NGO found:", ngo);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// Payment routes
+router.post('/capture-payment', auth, isNgo, capturePayment);
+router.post('/verify-payment', auth, isNgo, verifyPayment);
 
 // Route for sending OTP to the user's email
 // router.post("/sendotp", sendOTP);

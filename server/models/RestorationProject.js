@@ -23,7 +23,7 @@ const projectSchema = new mongoose.Schema({
   targetTrees: { type: Number, required: true },
   startDate: { type: Date, required: true },
   endDate: { type: Date },
-  status: { type: String, enum: ['Created', 'Assigned', 'InProgress', 'Completed', 'Verified'], default: 'Created' },
+  status: { type: String, enum: ['Created', 'Assigned', 'InProgress', 'Completed', 'UnderVerification', 'Verified'], default: 'Created' },
 
   requestedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Ngo' }],
 
